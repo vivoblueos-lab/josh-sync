@@ -143,6 +143,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           BRANCH: ${{ steps.config.outputs.branch }}
+          JOSH_SYNC_AUTO_MERGE: ${{ vars.JOSH_SYNC_AUTO_MERGE || 'false' }}
           PR_LABEL: ${{ inputs.pr-label }}
           SUBREPO: ${{ steps.config.outputs.subrepo }}
           UPSTREAM: ${{ steps.config.outputs.upstream }}

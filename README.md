@@ -96,6 +96,13 @@ You will need to have a GitHub App configured on the repository with write permi
 contents and pull requests. Synchronization PRs are labeled `josh-sync` by default; use
 the optional `pr-label` input to choose another label.
 
+Both synchronization workflows read the organization or repository Actions variable
+`JOSH_SYNC_AUTO_MERGE`. Set it to `true` to enable GitHub auto-merge for generated
+synchronization PRs in both directions; leave it unset or set it to `false` to keep the
+PR open for manual merging. Auto-merge uses a merge commit and waits for the target
+repository's configured requirements. A conflicting PR is left open and reported by the
+workflow.
+
 ## Automating pushes on CI
 
 The reusable `blueos-push.yml` workflow pushes the caller's default-branch state into a stable,

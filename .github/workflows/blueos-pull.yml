@@ -139,6 +139,7 @@ jobs:
         if: ${{ steps.josh-sync.outputs.pull_result == 'pull-finished' }}
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          JOSH_SYNC_AUTO_MERGE: ${{ vars.JOSH_SYNC_AUTO_MERGE || 'false' }}
           PR_AUTHOR: ${{ inputs.pr-author }}
           PR_BASE_BRANCH: ${{ inputs.pr-base-branch }}
           PR_LABEL: ${{ inputs.pr-label }}

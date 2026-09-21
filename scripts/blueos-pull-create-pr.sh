@@ -36,3 +36,5 @@ else
   echo "Updating pull request ${PR_URL}"
   echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
 fi
+
+bash "$(dirname "$0")/blueos-enable-auto-merge.sh" "$PR_URL"
