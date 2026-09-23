@@ -40,6 +40,20 @@ if ! jq -e \
 fi
 HEAD_SHA="$(jq -r '.head.sha' <<< "$PR_JSON")"
 API_URL="${GITHUB_API_URL:-https://api.github.com}"
+REVIEW_DECISION="$(GH_TOKEN="$SYNC_GITHUB_TOKEN" gh pr view "$PR_URL" \
+  --json reviewDecision --jq '.reviewDecision')"
+if [[ "$REVIEW_DECISION" == APPROVED ]]; then
+  REVIEWS="$(GH_TOKEN="$SYNC_GITHUB_TOKEN" gh api \
+    --method GET -f per_page=100 \
+    "repos/$TARGET_REPOSITORY/pulls/$PR_NUMBER/reviews")"
+  if jq -e --arg sha "$HEAD_SHA" \
+    'any(.state == "APPROVED" and .commit_id == $sha)' \
+    <<< "$REVIEWS" >/dev/null; then
+    echo "Current head of $PR_URL already meets the approval rule"
+    exit 0
+  fi
+fi
+
 echo "Approving current head $HEAD_SHA"
 REVIEW="$(jq -n --arg sha "$HEAD_SHA" \
   '{event:"APPROVE",commit_id:$sha}' | curl -fsS \
