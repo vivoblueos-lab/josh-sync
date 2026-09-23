@@ -34,6 +34,10 @@ on:
         required: false
         default: josh-sync
         type: string
+      approval-app-client-id:
+        description: 'Client ID of the GitHub App that approves synchronization pull requests'
+        required: false
+        type: string
       environment:
         description: 'GitHub Actions environment that will be used to access secrets'
         required: false
@@ -42,9 +46,28 @@ on:
       github-app-secret:
         description: 'Secret for a GitHub app that will create the sync PR'
         required: true
+      approval-app-secret:
+        description: 'Secret for a GitHub App that approves synchronization pull requests'
+        required: false
 
 jobs:
+  synchronization-approval-token:
+    if: ${{ inputs.approval-app-client-id != '' && secrets.approval-app-secret != '' }}
+    runs-on: ubuntu-latest
+    outputs:
+      token: ${{ steps.approval-token.outputs.token }}
+    steps:
+      - name: Create synchronization approval app token
+        uses: actions/create-github-app-token@v3.2.0
+        id: approval-token
+        with:
+          client-id: ${{ inputs.approval-app-client-id }}
+          private-key: ${{ secrets.approval-app-secret }}
+          permission-pull-requests: write
+
   perform-pull:
+    needs: synchronization-approval-token
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     outputs:
@@ -143,4 +166,6 @@ jobs:
           PR_AUTHOR: ${{ inputs.pr-author }}
           PR_BASE_BRANCH: ${{ inputs.pr-base-branch }}
           PR_LABEL: ${{ inputs.pr-label }}
+          APPROVAL_GITHUB_TOKEN: ${{ steps.approval-token.outputs.token }}
+          APPROVAL_APP_ENABLED: ${{ inputs.approval-app-client-id != '' && secrets.approval-app-secret != '' }}
         run: bash "$GITHUB_WORKSPACE/.github/josh-sync-scripts/scripts/blueos-pull-create-pr.sh"
