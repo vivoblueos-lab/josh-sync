@@ -61,7 +61,8 @@ if [[ "$REVIEW_DECISION" == APPROVED ]]; then
     <<< "$REVIEWS" >/dev/null; then
     echo "Current head of $PR_URL already meets the approval rule"
     bash "$(dirname "$0")/blueos-unsubscribe-pr.sh" \
-      "$PR_URL" "$TARGET_REPOSITORY"
+      "$PR_URL" "$TARGET_REPOSITORY" || \
+      echo "Initial unsubscribe deferred for $PR_URL"
     exit 0
   fi
 fi
@@ -86,4 +87,5 @@ fi
 REVIEWER="$(jq -r '.user.login' <<< "$REVIEW")"
 echo "Approved $PR_URL at $HEAD_SHA as $REVIEWER"
 bash "$(dirname "$0")/blueos-unsubscribe-pr.sh" \
-  "$PR_URL" "$TARGET_REPOSITORY"
+  "$PR_URL" "$TARGET_REPOSITORY" || \
+  echo "Initial unsubscribe deferred for $PR_URL"

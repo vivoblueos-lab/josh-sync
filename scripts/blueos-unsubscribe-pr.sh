@@ -32,6 +32,10 @@ if [[ "$WAIT_FOR_MERGE" == after-auto-merge &&
       sleep 5
     fi
   done
+  if jq -e '.merged_at != null' <<< "$PR_JSON" >/dev/null; then
+    # Merge-related notifications can recreate the reviewer's subscription.
+    sleep 8
+  fi
 fi
 
 PR_NODE_ID="$(GH_TOKEN="$SYNC_GITHUB_TOKEN" gh api \
@@ -45,24 +49,31 @@ if [[ -z "$UNSUBSCRIBE_LOGIN" ]]; then
   exit 1
 fi
 
-response="$(jq -n --arg id "$PR_NODE_ID" \
-  '{query:"mutation($id:ID!){updateSubscription(input:{subscribableId:$id,state:UNSUBSCRIBED}){subscribable{viewerSubscription}}}",variables:{id:$id}}' | \
-  curl -fsS \
-    -X POST \
-    -H "Authorization: Bearer $APPROVAL_UNSUBSCRIBE_GITHUB_TOKEN" \
-    -H 'Accept: application/vnd.github+json' \
-    -H 'Content-Type: application/json' \
-    --data-binary @- \
-    "$API_URL/graphql")"
-if jq -e '.errors == null and
-  .data.updateSubscription.subscribable.viewerSubscription == "UNSUBSCRIBED"' \
-  <<< "$response" >/dev/null; then
-  echo "Unsubscribed $UNSUBSCRIBE_LOGIN from $PR_URL"
-  exit 0
-fi
-
-echo 'GraphQL unsubscribe unavailable; trying notification thread API'
 for attempt in {1..6}; do
+  response="$(jq -n --arg id "$PR_NODE_ID" \
+    '{query:"mutation($id:ID!){updateSubscription(input:{subscribableId:$id,state:UNSUBSCRIBED}){subscribable{viewerSubscription}}}",variables:{id:$id}}' | \
+    curl -fsS \
+      -X POST \
+      -H "Authorization: Bearer $APPROVAL_UNSUBSCRIBE_GITHUB_TOKEN" \
+      -H 'Accept: application/vnd.github+json' \
+      -H 'Content-Type: application/json' \
+      --data-binary @- \
+      "$API_URL/graphql")"
+  if jq -e '.errors == null and
+    .data.updateSubscription.subscribable.viewerSubscription == "UNSUBSCRIBED"' \
+    <<< "$response" >/dev/null; then
+    echo "Unsubscribed $UNSUBSCRIBE_LOGIN from $PR_URL"
+    exit 0
+  fi
+  if [[ "$attempt" -lt 6 ]]; then
+    sleep 2
+  fi
+done
+
+echo "GraphQL unsubscribe unavailable for $PR_URL; trying notification thread API"
+jq -c '{errorTypes:[.errors[]?.type],viewerSubscription:.data.updateSubscription.subscribable.viewerSubscription}' \
+  <<< "$response"
+for attempt in {1..12}; do
   notifications="$(curl -fsS \
     -H "Authorization: Bearer $APPROVAL_UNSUBSCRIBE_GITHUB_TOKEN" \
     -H 'Accept: application/vnd.github+json' \
@@ -79,8 +90,8 @@ for attempt in {1..6}; do
     echo "Unsubscribed $UNSUBSCRIBE_LOGIN from $PR_URL"
     exit 0
   fi
-  if [[ "$attempt" -lt 6 ]]; then
-    sleep 2
+  if [[ "$attempt" -lt 12 ]]; then
+    sleep 5
   fi
 done
 echo "No notification thread found for $PR_URL; could not unsubscribe $UNSUBSCRIBE_LOGIN" >&2
