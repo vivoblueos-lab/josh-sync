@@ -42,6 +42,9 @@ on:
       github-app-secret:
         description: 'Secret for a GitHub app that will create the sync PR'
         required: true
+      approval-user-token:
+        description: 'Fine-grained user token used only to approve sync PRs.'
+        required: true
 
 jobs:
   perform-pull:
@@ -139,8 +142,10 @@ jobs:
         if: ${{ steps.josh-sync.outputs.pull_result == 'pull-finished' }}
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          APPROVAL_GITHUB_TOKEN: ${{ secrets.approval-user-token }}
           JOSH_SYNC_AUTO_MERGE: ${{ vars.JOSH_SYNC_AUTO_MERGE || 'false' }}
           PR_AUTHOR: ${{ inputs.pr-author }}
+          PR_HEAD_BRANCH: ${{ inputs.branch-name }}
           PR_BASE_BRANCH: ${{ inputs.pr-base-branch }}
           PR_LABEL: ${{ inputs.pr-label }}
         run: bash "$GITHUB_WORKSPACE/.github/josh-sync-scripts/scripts/blueos-pull-create-pr.sh"

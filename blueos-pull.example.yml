@@ -32,3 +32,4 @@ jobs:
       pr-base-branch: main
     secrets:
       github-app-secret: ${{ secrets.JOSH_SYNC_APP_PRIVATE_KEY }}
+      approval-user-token: ${{ secrets.JOSH_SYNC_APPROVAL_USER_TOKEN }}

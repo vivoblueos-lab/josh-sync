@@ -37,4 +37,6 @@ else
   echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
 fi
 
+bash "$(dirname "$0")/blueos-approve-pr.sh" \
+  "$PR_URL" "$GITHUB_REPOSITORY" "$PR_HEAD_BRANCH" "$PR_BASE_BRANCH" "$PR_AUTHOR"
 bash "$(dirname "$0")/blueos-enable-auto-merge.sh" "$PR_URL"

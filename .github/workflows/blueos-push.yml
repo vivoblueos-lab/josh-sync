@@ -6,6 +6,10 @@ on:
         description: 'Client ID of the GitHub App that pushes and creates the monorepo PR.'
         required: true
         type: string
+      pr-author:
+        description: 'Bot username of the GitHub App that creates the sync PR.'
+        required: true
+        type: string
       josh-sync-repository:
         description: 'GitHub owner/repository from which to install vivoblueos-josh-sync.'
         required: true
@@ -38,6 +42,9 @@ on:
     secrets:
       github-app-secret:
         description: 'Private key of the GitHub App.'
+        required: true
+      approval-user-token:
+        description: 'Fine-grained user token used only to approve sync PRs.'
         required: true
 jobs:
   perform-push:
@@ -142,9 +149,11 @@ jobs:
         if: ${{ steps.josh-sync.outputs.push_result == 'push-finished' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APPROVAL_GITHUB_TOKEN: ${{ secrets.approval-user-token }}
           BRANCH: ${{ steps.config.outputs.branch }}
           JOSH_SYNC_AUTO_MERGE: ${{ vars.JOSH_SYNC_AUTO_MERGE || 'false' }}
           PR_LABEL: ${{ inputs.pr-label }}
+          PR_AUTHOR: ${{ inputs.pr-author }}
           SUBREPO: ${{ steps.config.outputs.subrepo }}
           UPSTREAM: ${{ steps.config.outputs.upstream }}
           UPSTREAM_BRANCH: ${{ steps.config.outputs.upstream-branch }}
