@@ -23,6 +23,7 @@ if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ || \
   exit 1
 fi
 
+echo "Checking synchronization PR $PR_URL"
 PR_JSON="$(GH_TOKEN="$SYNC_GITHUB_TOKEN" gh api \
   "repos/$TARGET_REPOSITORY/pulls/$PR_NUMBER")"
 if ! jq -e \
@@ -38,14 +39,16 @@ if ! jq -e \
   exit 1
 fi
 HEAD_SHA="$(jq -r '.head.sha' <<< "$PR_JSON")"
+echo 'Checking approval token identity'
 REVIEWER="$(GH_TOKEN="$APPROVAL_GITHUB_TOKEN" gh api user --jq '.login')"
 if [[ -z "$REVIEWER" || "$REVIEWER" == "$PR_AUTHOR" ]]; then
   echo 'Approval user must differ from the PR author' >&2
   exit 1
 fi
 
+echo "Checking reviews for $HEAD_SHA"
 REVIEWS="$(GH_TOKEN="$APPROVAL_GITHUB_TOKEN" gh api \
-  --method GET --paginate -f per_page=100 \
+  --method GET -f per_page=100 \
   "repos/$TARGET_REPOSITORY/pulls/$PR_NUMBER/reviews")"
 if jq -se --arg reviewer "$REVIEWER" --arg sha "$HEAD_SHA" \
   'add | any(.user.login == $reviewer and .state == "APPROVED" and .commit_id == $sha)' \
