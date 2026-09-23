@@ -40,7 +40,6 @@ if ! jq -e \
   exit 1
 fi
 HEAD_SHA="$(jq -r '.head.sha' <<< "$PR_JSON")"
-PR_NODE_ID="$(jq -r '.node_id' <<< "$PR_JSON")"
 API_URL="${GITHUB_API_URL:-https://api.github.com}"
 UNSUBSCRIBE_LOGIN="$(curl -fsS \
   -H "Authorization: Bearer $APPROVAL_UNSUBSCRIBE_GITHUB_TOKEN" \
@@ -50,50 +49,6 @@ if [[ -z "$UNSUBSCRIBE_LOGIN" ]]; then
   echo 'Could not identify unsubscribe token owner' >&2
   exit 1
 fi
-
-unsubscribe_approval_user() {
-  local response notifications thread_id
-  response="$(jq -n --arg id "$PR_NODE_ID" \
-    '{query:"mutation($id:ID!){updateSubscription(input:{subscribableId:$id,state:UNSUBSCRIBED}){subscribable{viewerSubscription}}}",variables:{id:$id}}' | \
-    curl -fsS \
-      -X POST \
-      -H "Authorization: Bearer $APPROVAL_UNSUBSCRIBE_GITHUB_TOKEN" \
-      -H 'Accept: application/vnd.github+json' \
-      -H 'Content-Type: application/json' \
-      --data-binary @- \
-      "$API_URL/graphql")"
-  if jq -e '.errors == null and
-    .data.updateSubscription.subscribable.viewerSubscription == "UNSUBSCRIBED"' \
-    <<< "$response" >/dev/null; then
-    echo "Unsubscribed $UNSUBSCRIBE_LOGIN from $PR_URL"
-    return
-  fi
-
-  echo 'GraphQL unsubscribe unavailable; trying notification thread API'
-  for attempt in {1..6}; do
-    notifications="$(curl -fsS \
-      -H "Authorization: Bearer $APPROVAL_UNSUBSCRIBE_GITHUB_TOKEN" \
-      -H 'Accept: application/vnd.github+json' \
-      "$API_URL/repos/$TARGET_REPOSITORY/notifications?all=true&per_page=100")"
-    thread_id="$(jq -r --arg url "$API_URL/repos/$TARGET_REPOSITORY/pulls/$PR_NUMBER" \
-      '[.[] | select(.subject.url == $url) | .id] | first // empty' \
-      <<< "$notifications")"
-    if [[ -n "$thread_id" ]]; then
-      curl -fsS \
-        -X DELETE \
-        -H "Authorization: Bearer $APPROVAL_UNSUBSCRIBE_GITHUB_TOKEN" \
-        -H 'Accept: application/vnd.github+json' \
-        "$API_URL/notifications/threads/$thread_id/subscription" >/dev/null
-      echo "Unsubscribed $UNSUBSCRIBE_LOGIN from $PR_URL"
-      return
-    fi
-    if [[ "$attempt" -lt 6 ]]; then
-      sleep 2
-    fi
-  done
-  echo "No notification thread found for $PR_URL; could not unsubscribe $UNSUBSCRIBE_LOGIN" >&2
-  exit 1
-}
 
 REVIEW_DECISION="$(GH_TOKEN="$SYNC_GITHUB_TOKEN" gh pr view "$PR_URL" \
   --json reviewDecision --jq '.reviewDecision')"
@@ -105,7 +60,8 @@ if [[ "$REVIEW_DECISION" == APPROVED ]]; then
     'any(.state == "APPROVED" and .commit_id == $sha and .user.login == $reviewer)' \
     <<< "$REVIEWS" >/dev/null; then
     echo "Current head of $PR_URL already meets the approval rule"
-    unsubscribe_approval_user
+    bash "$(dirname "$0")/blueos-unsubscribe-pr.sh" \
+      "$PR_URL" "$TARGET_REPOSITORY"
     exit 0
   fi
 fi
@@ -129,4 +85,5 @@ if ! jq -e --arg author "$PR_AUTHOR" --arg sha "$HEAD_SHA" \
 fi
 REVIEWER="$(jq -r '.user.login' <<< "$REVIEW")"
 echo "Approved $PR_URL at $HEAD_SHA as $REVIEWER"
-unsubscribe_approval_user
+bash "$(dirname "$0")/blueos-unsubscribe-pr.sh" \
+  "$PR_URL" "$TARGET_REPOSITORY"
