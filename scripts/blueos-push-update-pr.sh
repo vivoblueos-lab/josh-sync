@@ -65,6 +65,8 @@ jq -n --arg label "$PR_LABEL" '{labels: [$label]}' | \
     "repos/$UPSTREAM/issues/$PR_NUMBER/labels" \
     --input - >/dev/null
 
+bash "$(dirname "$0")/blueos-approve-pr.sh" \
+  "$PR_URL" "$UPSTREAM" "$BRANCH" "$UPSTREAM_BRANCH" "$PR_AUTHOR"
 bash "$(dirname "$0")/blueos-enable-auto-merge.sh" "$PR_URL"
 
 echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"

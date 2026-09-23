@@ -96,6 +96,13 @@ You will need to have a GitHub App configured on the repository with write permi
 contents and pull requests. Synchronization PRs are labeled `josh-sync` by default; use
 the optional `pr-label` input to choose another label.
 
+Both reusable workflows require an `approval-user-token` secret from a distinct GitHub user
+with Write access to the target repository and a fine-grained token with Pull requests: write.
+The App creates or updates the PR, the user token approves its current head, and the App
+enables auto-merge. The workflow refuses to approve a PR with an unexpected author, head,
+base, or repository. A fine-grained token is limited to one resource owner, so lab and
+production organizations need separate tokens.
+
 Both synchronization workflows read the organization or repository Actions variable
 `JOSH_SYNC_AUTO_MERGE`. Set it to `true` to enable GitHub auto-merge for generated
 synchronization PRs in both directions; leave it unset or set it to `false` to keep the

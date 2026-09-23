@@ -22,7 +22,7 @@ jobs:
       # 这里的 JOSH_SYNC_APP_CLIENT_ID 和 JOSH_SYNC_APP_PRIVATE_KEY 是从组织/仓库变量和秘密中获取的
       github-app-client-id: ${{ vars.JOSH_SYNC_APP_CLIENT_ID }}
       # xxx[bot] 这里的 xxx, 就是 GitHub App 的名称
-      pr-author: "blueos-josh-sync[bot]"
+      pr-author: "blueos-lab-josh-sync[bot]"
       josh-sync-repository: vivoblueos-lab/josh-sync
       # 和上文的workflow版本保持一致
       josh-sync-revision: 09791fc8669446bd38b2fd5a5dacbfae8ad4c51e
@@ -32,3 +32,4 @@ jobs:
       pr-base-branch: main
     secrets:
       github-app-secret: ${{ secrets.JOSH_SYNC_APP_PRIVATE_KEY }}
+      approval-user-token: ${{ secrets.JOSH_SYNC_APPROVAL_USER_TOKEN }}

@@ -16,7 +16,9 @@ jobs:
     uses: vivoblueos-lab/josh-sync/.github/workflows/blueos-push.yml@09791fc8669446bd38b2fd5a5dacbfae8ad4c51e
     with:
       github-app-client-id: ${{ vars.JOSH_SYNC_APP_CLIENT_ID }}
+      pr-author: "blueos-lab-josh-sync[bot]"
       josh-sync-repository: vivoblueos-lab/josh-sync
       josh-sync-revision: 09791fc8669446bd38b2fd5a5dacbfae8ad4c51e
     secrets:
       github-app-secret: ${{ secrets.JOSH_SYNC_APP_PRIVATE_KEY }}
+      approval-user-token: ${{ secrets.JOSH_SYNC_APPROVAL_USER_TOKEN }}
