@@ -12,6 +12,10 @@ if [[ -z "${APPROVAL_GITHUB_TOKEN:-}" ]]; then
   exit 1
 fi
 
+approval_api() {
+  GH_TOKEN="$APPROVAL_GITHUB_TOKEN" gh api "$@"
+}
+
 PR_NUMBER="${PR_URL##*/}"
 if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ || \
       "$PR_URL" != "https://github.com/$TARGET_REPOSITORY/pull/$PR_NUMBER" ]]; then
@@ -19,21 +23,14 @@ if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ || \
   exit 1
 fi
 
-API_URL="${GITHUB_API_URL:-https://api.github.com}"
-APPROVAL_LOGIN="$(curl -fsS \
-  -H "Authorization: Bearer $APPROVAL_GITHUB_TOKEN" \
-  -H 'Accept: application/vnd.github+json' \
-  "$API_URL/user" | jq -r '.login // empty')"
+APPROVAL_LOGIN="$(approval_api user --jq '.login // empty')"
 if [[ -z "$APPROVAL_LOGIN" ]]; then
   echo 'Could not identify approval token owner' >&2
   exit 1
 fi
 
 echo "Checking synchronization PR $PR_URL"
-PR_JSON="$(curl -fsS \
-  -H "Authorization: Bearer $APPROVAL_GITHUB_TOKEN" \
-  -H 'Accept: application/vnd.github+json' \
-  "$API_URL/repos/$TARGET_REPOSITORY/pulls/$PR_NUMBER")"
+PR_JSON="$(approval_api "repos/$TARGET_REPOSITORY/pulls/$PR_NUMBER")"
 if ! jq -e \
   --arg repo "$TARGET_REPOSITORY" \
   --arg head "$HEAD_BRANCH" \
@@ -48,10 +45,8 @@ if ! jq -e \
   exit 1
 fi
 HEAD_SHA="$(jq -r '.head.sha' <<< "$PR_JSON")"
-REVIEWS="$(curl -fsS \
-  -H "Authorization: Bearer $APPROVAL_GITHUB_TOKEN" \
-  -H 'Accept: application/vnd.github+json' \
-  "$API_URL/repos/$TARGET_REPOSITORY/pulls/$PR_NUMBER/reviews?per_page=100")"
+REVIEWS="$(approval_api --method GET -f per_page=100 \
+  "repos/$TARGET_REPOSITORY/pulls/$PR_NUMBER/reviews")"
 if jq -e --arg sha "$HEAD_SHA" --arg reviewer "$APPROVAL_LOGIN" \
   'any(.state == "APPROVED" and .commit_id == $sha and .user.login == $reviewer)' \
   <<< "$REVIEWS" >/dev/null; then
@@ -60,14 +55,9 @@ if jq -e --arg sha "$HEAD_SHA" --arg reviewer "$APPROVAL_LOGIN" \
 fi
 
 echo "Approving current head $HEAD_SHA"
-REVIEW="$(jq -n --arg sha "$HEAD_SHA" \
-  '{event:"APPROVE",commit_id:$sha}' | curl -fsS \
-  -X POST \
-  -H "Authorization: Bearer $APPROVAL_GITHUB_TOKEN" \
-  -H 'Accept: application/vnd.github+json' \
-  -H 'Content-Type: application/json' \
-  --data-binary @- \
-  "$API_URL/repos/$TARGET_REPOSITORY/pulls/$PR_NUMBER/reviews")"
+REVIEW="$(approval_api --method POST -f event=APPROVE \
+  -f "commit_id=$HEAD_SHA" \
+  "repos/$TARGET_REPOSITORY/pulls/$PR_NUMBER/reviews")"
 if ! jq -e --arg author "$PR_AUTHOR" --arg sha "$HEAD_SHA" \
   --arg reviewer "$APPROVAL_LOGIN" \
   '.state == "APPROVED" and .commit_id == $sha and
