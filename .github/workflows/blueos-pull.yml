@@ -166,6 +166,6 @@ jobs:
           PR_AUTHOR: ${{ inputs.pr-author }}
           PR_BASE_BRANCH: ${{ inputs.pr-base-branch }}
           PR_LABEL: ${{ inputs.pr-label }}
-          APPROVAL_GITHUB_TOKEN: ${{ steps.approval-token.outputs.token }}
+          APPROVAL_GITHUB_TOKEN: ${{ needs.synchronization-approval-token.outputs.token }}
           APPROVAL_APP_ENABLED: ${{ inputs.approval-app-client-id != '' && secrets.approval-app-secret != '' }}
         run: bash "$GITHUB_WORKSPACE/.github/josh-sync-scripts/scripts/blueos-pull-create-pr.sh"
