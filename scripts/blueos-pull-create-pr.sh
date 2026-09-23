@@ -37,4 +37,18 @@ else
   echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
 fi
 
+if [[ "${APPROVAL_APP_ENABLED:-false}" == "true" ]]; then
+  PR_NUMBER="${PR_URL##*/}"
+  PR_HEAD_SHA="$(gh pr view "$PR_URL" \
+    --json headRefOid \
+    --jq .headRefOid)"
+
+  GH_TOKEN="$APPROVAL_GITHUB_TOKEN" gh api \
+    "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
+    --field event=APPROVE \
+    --field commit_id="$PR_HEAD_SHA"
+
+  echo "Approved synchronization pull request ${PR_URL}"
+fi
+
 bash "$(dirname "$0")/blueos-enable-auto-merge.sh" "$PR_URL"

@@ -103,6 +103,12 @@ PR open for manual merging. Auto-merge uses a merge commit and waits for the tar
 repository's configured requirements. A conflicting PR is left open and reported by the
 workflow.
 
+If a protected branch requires an approving review, configure a second GitHub App with only
+`pull-requests: write` permission to approve generated pull PRs. Pass its client ID as
+`approval-app-client-id` and its private key as the `approval-app-secret` reusable-workflow
+secret. The approval is submitted before auto-merge is enabled, while the original
+synchronization App still creates the PR.
+
 ## Automating pushes on CI
 
 The reusable `blueos-push.yml` workflow pushes the caller's default-branch state into a stable,

@@ -30,5 +30,9 @@ jobs:
       branch-name: blueos-pull
       # 这里填的是当前子仓库的默认分支, libc的 blueos-dev 比较特殊
       pr-base-branch: main
+      # 可选: 使用只具备 Pull requests write 权限的第二个 App, 为同步 PR 提交 approval
+      approval-app-client-id: ${{ vars.JOSH_SYNC_APPROVAL_APP_CLIENT_ID }}
     secrets:
       github-app-secret: ${{ secrets.JOSH_SYNC_APP_PRIVATE_KEY }}
+      # 可选: 与 approval-app-client-id 配套
+      approval-app-secret: ${{ secrets.JOSH_SYNC_APPROVAL_APP_PRIVATE_KEY }}
