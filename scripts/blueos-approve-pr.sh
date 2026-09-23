@@ -39,29 +39,8 @@ if ! jq -e \
   exit 1
 fi
 HEAD_SHA="$(jq -r '.head.sha' <<< "$PR_JSON")"
-echo 'Checking approval token identity'
 API_URL="${GITHUB_API_URL:-https://api.github.com}"
-REVIEWER="$(curl -fsS \
-  -H "Authorization: Bearer $APPROVAL_GITHUB_TOKEN" \
-  -H 'Accept: application/vnd.github+json' \
-  "$API_URL/user" | jq -er '.login')"
-if [[ -z "$REVIEWER" || "$REVIEWER" == "$PR_AUTHOR" ]]; then
-  echo 'Approval user must differ from the PR author' >&2
-  exit 1
-fi
-
-echo "Checking reviews for $HEAD_SHA"
-REVIEWS="$(curl -fsS \
-  -H "Authorization: Bearer $APPROVAL_GITHUB_TOKEN" \
-  -H 'Accept: application/vnd.github+json' \
-  "$API_URL/repos/$TARGET_REPOSITORY/pulls/$PR_NUMBER/reviews?per_page=100")"
-if jq -e --arg reviewer "$REVIEWER" --arg sha "$HEAD_SHA" \
-  'any(.user.login == $reviewer and .state == "APPROVED" and .commit_id == $sha)' \
-  <<< "$REVIEWS" >/dev/null; then
-  echo "Current head of $PR_URL is already approved by $REVIEWER"
-  exit 0
-fi
-
+echo "Approving current head $HEAD_SHA"
 REVIEW="$(jq -n --arg sha "$HEAD_SHA" \
   '{event:"APPROVE",commit_id:$sha}' | curl -fsS \
   -X POST \
@@ -70,10 +49,12 @@ REVIEW="$(jq -n --arg sha "$HEAD_SHA" \
   -H 'Content-Type: application/json' \
   --data-binary @- \
   "$API_URL/repos/$TARGET_REPOSITORY/pulls/$PR_NUMBER/reviews")"
-if ! jq -e --arg reviewer "$REVIEWER" --arg sha "$HEAD_SHA" \
-  '.state == "APPROVED" and .commit_id == $sha and .user.login == $reviewer' \
+if ! jq -e --arg author "$PR_AUTHOR" --arg sha "$HEAD_SHA" \
+  '.state == "APPROVED" and .commit_id == $sha and
+   (.user.login | type == "string" and . != $author)' \
   <<< "$REVIEW" >/dev/null; then
   echo "Approval API did not approve the current head of $PR_URL" >&2
   exit 1
 fi
+REVIEWER="$(jq -r '.user.login' <<< "$REVIEW")"
 echo "Approved $PR_URL at $HEAD_SHA as $REVIEWER"
