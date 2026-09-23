@@ -7,9 +7,8 @@ HEAD_BRANCH="$3"
 BASE_BRANCH="$4"
 PR_AUTHOR="$5"
 
-if [[ -z "${SYNC_GITHUB_TOKEN:-}" || -z "${APPROVAL_GITHUB_TOKEN:-}" ||
-      -z "${APPROVAL_UNSUBSCRIBE_GITHUB_TOKEN:-}" ]]; then
-  echo 'Missing synchronization, approval, or unsubscribe token' >&2
+if [[ -z "${SYNC_GITHUB_TOKEN:-}" || -z "${APPROVAL_GITHUB_TOKEN:-}" ]]; then
+  echo 'Missing synchronization or approval token' >&2
   exit 1
 fi
 if [[ "$SYNC_GITHUB_TOKEN" == "$APPROVAL_GITHUB_TOKEN" ]]; then
@@ -41,12 +40,12 @@ if ! jq -e \
 fi
 HEAD_SHA="$(jq -r '.head.sha' <<< "$PR_JSON")"
 API_URL="${GITHUB_API_URL:-https://api.github.com}"
-UNSUBSCRIBE_LOGIN="$(curl -fsS \
-  -H "Authorization: Bearer $APPROVAL_UNSUBSCRIBE_GITHUB_TOKEN" \
+APPROVAL_LOGIN="$(curl -fsS \
+  -H "Authorization: Bearer $APPROVAL_GITHUB_TOKEN" \
   -H 'Accept: application/vnd.github+json' \
   "$API_URL/user" | jq -r '.login // empty')"
-if [[ -z "$UNSUBSCRIBE_LOGIN" ]]; then
-  echo 'Could not identify unsubscribe token owner' >&2
+if [[ -z "$APPROVAL_LOGIN" ]]; then
+  echo 'Could not identify approval token owner' >&2
   exit 1
 fi
 
@@ -56,13 +55,10 @@ if [[ "$REVIEW_DECISION" == APPROVED ]]; then
   REVIEWS="$(GH_TOKEN="$SYNC_GITHUB_TOKEN" gh api \
     --method GET -f per_page=100 \
     "repos/$TARGET_REPOSITORY/pulls/$PR_NUMBER/reviews")"
-  if jq -e --arg sha "$HEAD_SHA" --arg reviewer "$UNSUBSCRIBE_LOGIN" \
+  if jq -e --arg sha "$HEAD_SHA" --arg reviewer "$APPROVAL_LOGIN" \
     'any(.state == "APPROVED" and .commit_id == $sha and .user.login == $reviewer)' \
     <<< "$REVIEWS" >/dev/null; then
     echo "Current head of $PR_URL already meets the approval rule"
-    bash "$(dirname "$0")/blueos-unsubscribe-pr.sh" \
-      "$PR_URL" "$TARGET_REPOSITORY" || \
-      echo "Initial unsubscribe deferred for $PR_URL"
     exit 0
   fi
 fi
@@ -77,7 +73,7 @@ REVIEW="$(jq -n --arg sha "$HEAD_SHA" \
   --data-binary @- \
   "$API_URL/repos/$TARGET_REPOSITORY/pulls/$PR_NUMBER/reviews")"
 if ! jq -e --arg author "$PR_AUTHOR" --arg sha "$HEAD_SHA" \
-  --arg reviewer "$UNSUBSCRIBE_LOGIN" \
+  --arg reviewer "$APPROVAL_LOGIN" \
   '.state == "APPROVED" and .commit_id == $sha and
    .user.login == $reviewer and .user.login != $author' \
   <<< "$REVIEW" >/dev/null; then
@@ -86,6 +82,3 @@ if ! jq -e --arg author "$PR_AUTHOR" --arg sha "$HEAD_SHA" \
 fi
 REVIEWER="$(jq -r '.user.login' <<< "$REVIEW")"
 echo "Approved $PR_URL at $HEAD_SHA as $REVIEWER"
-bash "$(dirname "$0")/blueos-unsubscribe-pr.sh" \
-  "$PR_URL" "$TARGET_REPOSITORY" || \
-  echo "Initial unsubscribe deferred for $PR_URL"

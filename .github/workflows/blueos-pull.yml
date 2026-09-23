@@ -45,9 +45,6 @@ on:
       approval-user-token:
         description: 'Fine-grained user token used only to approve sync PRs.'
         required: true
-      approval-unsubscribe-user-token:
-        description: 'Classic user token used to unsubscribe from approved sync PRs.'
-        required: true
 
 jobs:
   perform-pull:
@@ -147,7 +144,6 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           SYNC_GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           APPROVAL_GITHUB_TOKEN: ${{ secrets.approval-user-token }}
-          APPROVAL_UNSUBSCRIBE_GITHUB_TOKEN: ${{ secrets.approval-unsubscribe-user-token }}
           JOSH_SYNC_AUTO_MERGE: ${{ vars.JOSH_SYNC_AUTO_MERGE || 'false' }}
           PR_AUTHOR: ${{ inputs.pr-author }}
           PR_HEAD_BRANCH: ${{ inputs.branch-name }}
