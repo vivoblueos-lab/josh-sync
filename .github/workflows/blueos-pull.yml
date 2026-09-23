@@ -52,7 +52,7 @@ on:
 
 jobs:
   synchronization-approval-token:
-    if: ${{ inputs.approval-app-client-id != '' && secrets.approval-app-secret != '' }}
+    if: ${{ inputs.approval-app-client-id != '' }}
     runs-on: ubuntu-latest
     outputs:
       token: ${{ steps.approval-token.outputs.token }}
@@ -167,5 +167,5 @@ jobs:
           PR_BASE_BRANCH: ${{ inputs.pr-base-branch }}
           PR_LABEL: ${{ inputs.pr-label }}
           APPROVAL_GITHUB_TOKEN: ${{ needs.synchronization-approval-token.outputs.token }}
-          APPROVAL_APP_ENABLED: ${{ inputs.approval-app-client-id != '' && secrets.approval-app-secret != '' }}
+          APPROVAL_APP_ENABLED: ${{ inputs.approval-app-client-id != '' }}
         run: bash "$GITHUB_WORKSPACE/.github/josh-sync-scripts/scripts/blueos-pull-create-pr.sh"
