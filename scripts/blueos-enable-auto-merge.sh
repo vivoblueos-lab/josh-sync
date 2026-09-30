@@ -15,7 +15,15 @@ case "${JOSH_SYNC_AUTO_MERGE:-false}" in
     ;;
 esac
 
-if gh pr merge "$PR_URL" --auto --merge; then
+MERGE_SUMMARY="${2:?Expected a merge commit summary}"
+PR_NUMBER="${PR_URL##*/}"
+if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+  echo "Invalid pull request URL: ${PR_URL}" >&2
+  exit 1
+fi
+MERGE_SUBJECT="$MERGE_SUMMARY (#$PR_NUMBER)"
+
+if gh pr merge "$PR_URL" --auto --merge --subject "$MERGE_SUBJECT" --body ""; then
   echo "Enabled auto-merge for ${PR_URL}"
   exit 0
 fi

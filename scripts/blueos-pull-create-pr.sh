@@ -39,4 +39,16 @@ fi
 
 bash "$(dirname "$0")/blueos-approve-pr.sh" \
   "$PR_URL" "$GITHUB_REPOSITORY" "$PR_HEAD_BRANCH" "$PR_BASE_BRANCH" "$PR_AUTHOR"
-bash "$(dirname "$0")/blueos-enable-auto-merge.sh" "$PR_URL"
+UPSTREAM_REPOSITORY="$(python3 - <<'PY'
+import re
+import tomllib
+
+with open("josh-sync.toml", "rb") as config_file:
+    upstream = tomllib.load(config_file)["upstream-repo"]
+if not isinstance(upstream, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", upstream):
+    raise SystemExit("upstream-repo must be a GitHub owner/repository pair")
+print(upstream.split("/")[1])
+PY
+)"
+bash "$(dirname "$0")/blueos-enable-auto-merge.sh" \
+  "$PR_URL" "Sync changes from $UPSTREAM_REPOSITORY repo"
