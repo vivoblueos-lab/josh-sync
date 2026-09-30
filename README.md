@@ -110,6 +110,11 @@ PR open for manual merging. Auto-merge uses a merge commit and waits for the tar
 repository's configured requirements. A conflicting PR is left open and reported by the
 workflow.
 
+Automated merge commits use a single-line message: `Sync kernel subtree changes (#42)`
+for a push, or `Sync changes from blueos repo (#497)` for a pull. The subtree name
+comes from `repo`, and the source monorepo name comes from `upstream-repo` in
+`josh-sync.toml`. The default GitHub merge commit body is omitted.
+
 ## Automating pushes on CI
 
 The reusable `blueos-push.yml` workflow pushes the caller's default-branch state into a stable,
