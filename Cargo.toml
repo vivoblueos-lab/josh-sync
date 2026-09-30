@@ -16,8 +16,6 @@ serde = { version = "1", features = ["derive"] }
 urlencoding = "2"
 which = "8"
 regex = "1.12.3"
-
-[dev-dependencies]
 tempfile = "3"
 
 [profile.release]

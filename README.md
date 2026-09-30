@@ -117,6 +117,18 @@ CI-owned branch in the configured BlueOS monorepo. It creates a monorepo pull re
 the existing pull request for that exact head and base branch. If the full filtered trees already
 match, including `blueos-version`, the workflow succeeds without changing the branch or PR.
 
+Reverse conversion uses a unique temporary branch named `blueos-josh-stage-*`, based on the
+commit recorded in `blueos-version`. The synchronizer verifies the converted commit by fetching
+its subtree back through Josh before publishing it to the sync branch in a single push. This
+keeps an existing PR open instead of temporarily resetting its branch to the upstream base.
+Publication uses an explicit `--force-with-lease`, including when the sync branch did not exist;
+a concurrent branch change fails the operation without overwriting the other writer.
+
+Temporary branches are cleaned up after success and handled errors. Cleanup failures are logged
+as warnings with the branch name and do not hide the operation's result. A forcibly terminated
+process or an interrupted remote response can leave a temporary branch for manual cleanup.
+Temporary branch pushes may still trigger workflows configured for all branch pushes.
+
 After a successful push, the workflow compares the configured monorepo base branch with the
 pushed sync branch using the GitHub compare API. If exactly one file changed and its basename
 is `blueos-version` (at the root or in any directory), it skips creating or updating the PR,
