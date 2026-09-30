@@ -351,9 +351,9 @@ After you fix the conflicts, `git add` the changes and run `git merge --continue
         let blueos_git = prepare_blueos_checkout(upstream_repo, no_interact, self.verbose)
             .context("cannot prepare BlueOS monorepo checkout")?;
 
-        // Prepare the branch. Pushing works much better if we use as base exactly
-        // the commit that we pulled from last time, so we use the `blueos-version`
-        // file to find out which commit that would be.
+        // Convert against the last pulled base without exposing that intermediate
+        // state on the PR branch. GitHub can close the PR when its head is reset
+        // to a commit already reachable from the base branch.
         println!("Preparing {user_upstream_url} (base: {base_upstream_sha})...");
 
         // Download the base upstream SHA
@@ -369,28 +369,36 @@ After you fix the conflicts, `git add` the changes and run `git merge --continue
         )
         .context("cannot download latest upstream SHA")?;
 
-        // And push it to the user's fork's branch
-        push_base_to_branch(
+        publish_staged_update(
             &blueos_git,
             &user_upstream_url,
             branch,
             &base_upstream_sha,
             existing_branch.as_deref(),
             self.verbose,
+            |stage_branch| {
+                println!("Converting changes on {stage_branch}...");
+                run_command(
+                    ["git", "push", &josh_url, &format!("HEAD:{stage_branch}")],
+                    self.verbose,
+                )?;
+                run_command_at(
+                    ["git", "fetch", &user_upstream_url, stage_branch],
+                    &blueos_git,
+                    self.verbose,
+                )?;
+                let candidate = run_command_at(
+                    ["git", "rev-parse", "FETCH_HEAD"],
+                    &blueos_git,
+                    self.verbose,
+                )?;
+                let candidate_url = josh.git_url(&fork_repo, Some(&candidate), &filter);
+                self.roundtrip_check(&self.context.config, &candidate_url)?;
+                Ok(candidate)
+            },
         )
-        .context("cannot push to your fork")?;
-        println!();
-
-        // Do the actual push from the subtree git repo
-        println!("Pushing changes...");
-        run_command(
-            ["git", "push", &josh_url, &format!("HEAD:{branch}")],
-            self.verbose,
-        )?;
-        println!();
-
-        // Do a round-trip check to make sure the push worked as expected.
-        self.roundtrip_check(&self.context.config, &josh_url, branch)?;
+        .context("cannot publish the verified sync branch")?;
+        println!("Published verified changes to {branch}. Please create a BlueOS monorepo PR.");
         println!("{NO_REBASE_WARN}");
 
         Ok(())
@@ -432,22 +440,17 @@ After you fix the conflicts, `git add` the changes and run `git merge --continue
         Ok(())
     }
 
-    fn roundtrip_check(
-        &self,
-        config: &JoshConfig,
-        josh_url: &str,
-        branch: &str,
-    ) -> anyhow::Result<()> {
+    fn roundtrip_check(&self, config: &JoshConfig, josh_url: &str) -> anyhow::Result<()> {
         run_command_at(
-            ["git", "fetch", josh_url, branch],
-            &std::env::current_dir().unwrap(),
+            ["git", "fetch", josh_url],
+            &std::env::current_dir()?,
             self.verbose,
         )?;
         let head = self.local_roundtrip_head(config)?;
         let fetch_head = run_command(["git", "rev-parse", "FETCH_HEAD"], self.verbose)?;
         validate_roundtrip(&head, &fetch_head)?;
         println!(
-            "Confirmed that the push round-trips back to {} properly. Please create a BlueOS monorepo PR.",
+            "Confirmed that the candidate round-trips back to {} properly.",
             self.context.config.repo
         );
         Ok(())
@@ -517,22 +520,102 @@ fn ensure_branch_update_allowed(
     Ok(())
 }
 
-fn push_base_to_branch(
+fn push_commit_to_branch(
+    workdir: &Path,
+    remote: &str,
+    branch: &str,
+    commit: &str,
+    existing_sha: Option<&str>,
+    verbose: bool,
+) -> anyhow::Result<()> {
+    let refspec = format!("{commit}:refs/heads/{branch}");
+    // An empty expected SHA requires the branch to remain absent, including
+    // when another caller creates an otherwise fast-forwardable branch.
+    let lease = format!(
+        "--force-with-lease=refs/heads/{branch}:{}",
+        existing_sha.unwrap_or_default()
+    );
+    run_command_at(["git", "push", &lease, remote, &refspec], workdir, verbose)?;
+    Ok(())
+}
+
+fn publish_staged_update(
     workdir: &Path,
     remote: &str,
     branch: &str,
     base: &str,
     existing_sha: Option<&str>,
     verbose: bool,
+    prepare_and_validate: impl FnOnce(&str) -> anyhow::Result<String>,
 ) -> anyhow::Result<()> {
-    let refspec = format!("{base}:refs/heads/{branch}");
-    if let Some(existing_sha) = existing_sha {
-        let lease = format!("--force-with-lease=refs/heads/{branch}:{existing_sha}");
-        run_command_at(["git", "push", &lease, remote, &refspec], workdir, verbose)?;
-    } else {
-        run_command_at(["git", "push", remote, &refspec], workdir, verbose)?;
+    let stage = RemoteStageBranch::create(workdir, remote, base, verbose)?;
+    let candidate = prepare_and_validate(&stage.branch)?;
+    push_commit_to_branch(workdir, remote, branch, &candidate, existing_sha, verbose)
+        .context("sync branch changed during conversion, or publication failed")
+    // The staging branch is cleaned up on both success and error. Cleanup
+    // failure is a warning and never replaces the operation's result.
+}
+
+struct RemoteStageBranch {
+    workdir: PathBuf,
+    remote: String,
+    branch: String,
+    verbose: bool,
+    _name_reservation: tempfile::TempDir,
+}
+
+impl RemoteStageBranch {
+    fn create(workdir: &Path, remote: &str, base: &str, verbose: bool) -> anyhow::Result<Self> {
+        let reservation = tempfile::Builder::new()
+            .prefix("blueos-josh-stage-")
+            .rand_bytes(16)
+            .tempdir()?;
+        let branch = reservation
+            .path()
+            .file_name()
+            .context("temporary branch name is missing")?
+            .to_string_lossy()
+            .into_owned();
+        println!("Preparing temporary branch {branch}...");
+        push_commit_to_branch(workdir, remote, &branch, base, None, verbose)
+            .with_context(|| {
+                format!("cannot create temporary branch {branch}; check this ref if the remote response was interrupted")
+            })?;
+        Ok(Self {
+            workdir: workdir.to_owned(),
+            remote: remote.to_owned(),
+            branch,
+            verbose,
+            _name_reservation: reservation,
+        })
     }
-    Ok(())
+
+    fn cleanup(&self) -> anyhow::Result<()> {
+        if let Some(sha) =
+            resolve_remote_branch(&self.remote, &self.branch, &self.workdir, self.verbose)?
+        {
+            let lease = format!("--force-with-lease=refs/heads/{}:{sha}", self.branch);
+            let refspec = format!(":refs/heads/{}", self.branch);
+            run_command_at(
+                ["git", "push", &lease, &self.remote, &refspec],
+                &self.workdir,
+                self.verbose,
+            )?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for RemoteStageBranch {
+    fn drop(&mut self) {
+        match self.cleanup() {
+            Ok(()) => println!("Cleaned up temporary branch {}.", self.branch),
+            Err(error) => eprintln!(
+                "Warning: cannot clean up temporary branch {} on {}: {error:#}",
+                self.branch, self.remote
+            ),
+        }
+    }
 }
 
 fn refs_have_same_tree(
@@ -831,7 +914,7 @@ mod tests {
         let first = commit_file(&worktree, "file", "one\n", "one");
         let second = commit_file(&worktree, "file", "two\n", "two");
 
-        push_base_to_branch(
+        push_commit_to_branch(
             &worktree,
             remote.to_str().unwrap(),
             "sync",
@@ -840,7 +923,7 @@ mod tests {
             false,
         )
         .unwrap();
-        push_base_to_branch(
+        push_commit_to_branch(
             &worktree,
             remote.to_str().unwrap(),
             "sync",
@@ -862,7 +945,7 @@ mod tests {
         let first = commit_file(&worktree, "file", "one\n", "one");
         let second = commit_file(&worktree, "file", "two\n", "two");
         let third = commit_file(&worktree, "file", "three\n", "three");
-        push_base_to_branch(
+        push_commit_to_branch(
             &worktree,
             remote.to_str().unwrap(),
             "sync",
@@ -882,7 +965,7 @@ mod tests {
         );
 
         assert!(
-            push_base_to_branch(
+            push_commit_to_branch(
                 &worktree,
                 remote.to_str().unwrap(),
                 "sync",
@@ -894,38 +977,215 @@ mod tests {
         );
     }
 
+    fn staging_refs(remote: &Path) -> String {
+        git(
+            remote,
+            &[
+                "for-each-ref",
+                "--format=%(refname)",
+                "refs/heads/blueos-josh-stage-*",
+            ],
+        )
+    }
+
     #[test]
-    fn rerun_recovers_after_the_branch_was_reset_to_the_base() {
+    fn publishes_only_the_verified_candidate_and_cleans_up() {
         let (_temp, worktree, remote) = test_repository();
         let base = commit_file(&worktree, "file", "base\n", "base");
-        let pushed = commit_file(&worktree, "file", "pushed\n", "pushed");
         let previous = commit_file(&worktree, "file", "previous\n", "previous");
-        let remote = remote.to_str().unwrap();
-
-        push_base_to_branch(&worktree, remote, "sync", &previous, None, false).unwrap();
-        push_base_to_branch(&worktree, remote, "sync", &base, Some(&previous), false).unwrap();
-
-        let observed_base = resolve_remote_branch(remote, "sync", &worktree, false)
-            .unwrap()
+        let candidate = commit_file(&worktree, "file", "candidate\n", "candidate");
+        let remote_url = remote.to_str().unwrap();
+        for expected in [None, Some(previous.as_str())] {
+            if let Some(sha) = expected {
+                push_commit_to_branch(&worktree, remote_url, "sync", sha, Some(&candidate), false)
+                    .unwrap();
+            }
+            publish_staged_update(
+                &worktree,
+                remote_url,
+                "sync",
+                &base,
+                expected,
+                false,
+                |stage| {
+                    assert_eq!(
+                        resolve_remote_branch(remote_url, "sync", &worktree, false)?,
+                        expected.map(str::to_owned)
+                    );
+                    assert_eq!(
+                        resolve_remote_branch(remote_url, stage, &worktree, false)?,
+                        Some(base.clone())
+                    );
+                    push_commit_to_branch(
+                        &worktree,
+                        remote_url,
+                        stage,
+                        &candidate,
+                        Some(&base),
+                        false,
+                    )?;
+                    assert_eq!(
+                        resolve_remote_branch(remote_url, "sync", &worktree, false)?,
+                        expected.map(str::to_owned)
+                    );
+                    validate_roundtrip(&candidate, &candidate)?;
+                    Ok(candidate.clone())
+                },
+            )
             .unwrap();
-        push_base_to_branch(
+            assert_eq!(
+                resolve_remote_branch(remote_url, "sync", &worktree, false).unwrap(),
+                Some(candidate.clone())
+            );
+            assert!(staging_refs(&remote).is_empty());
+        }
+    }
+
+    #[test]
+    fn conversion_and_validation_errors_leave_the_pr_branch_untouched() {
+        let (_temp, worktree, remote) = test_repository();
+        let base = commit_file(&worktree, "file", "base\n", "base");
+        let previous = commit_file(&worktree, "file", "previous\n", "previous");
+        let candidate = commit_file(&worktree, "file", "candidate\n", "candidate");
+        let remote_url = remote.to_str().unwrap();
+        for expected in [None, Some(previous.as_str())] {
+            if let Some(sha) = expected {
+                push_commit_to_branch(&worktree, remote_url, "sync", sha, None, false).unwrap();
+            }
+            for validation_error in [false, true] {
+                let result = publish_staged_update(
+                    &worktree,
+                    remote_url,
+                    "sync",
+                    &base,
+                    expected,
+                    false,
+                    |stage| {
+                        if validation_error {
+                            push_commit_to_branch(
+                                &worktree,
+                                remote_url,
+                                stage,
+                                &candidate,
+                                Some(&base),
+                                false,
+                            )?;
+                            validate_roundtrip(&candidate, &base)?;
+                        }
+                        anyhow::bail!("conversion failed")
+                    },
+                );
+                assert!(result.is_err());
+                assert_eq!(
+                    resolve_remote_branch(remote_url, "sync", &worktree, false).unwrap(),
+                    expected.map(str::to_owned)
+                );
+                assert!(staging_refs(&remote).is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn refuses_concurrent_creation_change_or_deletion_during_conversion() {
+        let (_temp, worktree, remote) = test_repository();
+        let base = commit_file(&worktree, "file", "base\n", "base");
+        let previous = commit_file(&worktree, "file", "previous\n", "previous");
+        let candidate = commit_file(&worktree, "file", "candidate\n", "candidate");
+        let remote_url = remote.to_str().unwrap();
+        // The concurrent creation is a fast-forwardable ancestor of candidate.
+        // A plain push would incorrectly accept it.
+        for (expected, competing) in [
+            (None, Some(base.as_str())),
+            (Some(previous.as_str()), Some(base.as_str())),
+            (Some(previous.as_str()), None),
+        ] {
+            git(&remote, &["update-ref", "-d", "refs/heads/sync"]);
+            if let Some(sha) = expected {
+                push_commit_to_branch(&worktree, remote_url, "sync", sha, None, false).unwrap();
+            }
+            let result = publish_staged_update(
+                &worktree,
+                remote_url,
+                "sync",
+                &base,
+                expected,
+                false,
+                |stage| {
+                    push_commit_to_branch(
+                        &worktree,
+                        remote_url,
+                        stage,
+                        &candidate,
+                        Some(&base),
+                        false,
+                    )?;
+                    match competing {
+                        Some(sha) => {
+                            git(&remote, &["update-ref", "refs/heads/sync", sha]);
+                        }
+                        None => {
+                            git(&remote, &["update-ref", "-d", "refs/heads/sync"]);
+                        }
+                    }
+                    Ok(candidate.clone())
+                },
+            );
+            assert!(result.is_err());
+            assert_eq!(
+                resolve_remote_branch(remote_url, "sync", &worktree, false).unwrap(),
+                competing.map(str::to_owned)
+            );
+            assert!(staging_refs(&remote).is_empty());
+        }
+    }
+
+    #[test]
+    fn staging_branches_are_unique_and_cleanup_is_independent() {
+        let (_temp, worktree, remote) = test_repository();
+        let base = commit_file(&worktree, "file", "base\n", "base");
+        let first =
+            RemoteStageBranch::create(&worktree, remote.to_str().unwrap(), &base, false).unwrap();
+        let second =
+            RemoteStageBranch::create(&worktree, remote.to_str().unwrap(), &base, false).unwrap();
+        assert_ne!(first.branch, second.branch);
+        assert_eq!(staging_refs(&remote).lines().count(), 2);
+        drop(first);
+        assert_eq!(staging_refs(&remote).lines().count(), 1);
+        drop(second);
+        assert!(staging_refs(&remote).is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cleanup_failure_preserves_success_or_the_original_error() {
+        use std::os::unix::fs::PermissionsExt;
+        let (_temp, worktree, remote) = test_repository();
+        let base = commit_file(&worktree, "file", "base\n", "base");
+        let candidate = commit_file(&worktree, "file", "candidate\n", "candidate");
+        let hook = remote.join("hooks/update");
+        fs::write(&hook, "#!/bin/sh\ncase \"$1:$3\" in refs/heads/blueos-josh-stage-*:0000000000000000000000000000000000000000) exit 1;; esac\nexit 0\n").unwrap();
+        fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+        let remote_url = remote.to_str().unwrap();
+        publish_staged_update(&worktree, remote_url, "sync", &base, None, false, |_| {
+            Ok(candidate.clone())
+        })
+        .unwrap();
+        assert_eq!(
+            resolve_remote_branch(remote_url, "sync", &worktree, false).unwrap(),
+            Some(candidate.clone())
+        );
+        let error = publish_staged_update(
             &worktree,
-            remote,
+            remote_url,
             "sync",
             &base,
-            Some(&observed_base),
+            Some(&candidate),
             false,
+            |_| anyhow::bail!("original validation error"),
         )
-        .unwrap();
-        git(
-            &worktree,
-            &["push", remote, &format!("{pushed}:refs/heads/sync")],
-        );
-
-        assert_eq!(
-            resolve_remote_branch(remote, "sync", &worktree, false).unwrap(),
-            Some(pushed)
-        );
+        .unwrap_err();
+        assert_eq!(error.to_string(), "original validation error");
+        assert_eq!(staging_refs(&remote).lines().count(), 2);
     }
 
     #[test]
