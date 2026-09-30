@@ -34,7 +34,7 @@ on:
         type: string
     outputs:
       pr_url:
-        description: 'Created or updated monorepo pull request URL.'
+        description: 'Created or updated monorepo pull request URL; empty when the PR step is skipped.'
         value: ${{ jobs.perform-push.outputs.pr_url }}
       push_result:
         description: 'Either push-finished or skipped.'
@@ -144,9 +144,18 @@ jobs:
           fi
 
           exit "$exitcode"
+      - name: Check monorepo pull request changes
+        id: check-pr
+        if: ${{ steps.josh-sync.outputs.push_result == 'push-finished' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BRANCH: ${{ steps.config.outputs.branch }}
+          UPSTREAM: ${{ steps.config.outputs.upstream }}
+          UPSTREAM_BRANCH: ${{ steps.config.outputs.upstream-branch }}
+        run: bash "$GITHUB_WORKSPACE/.github/josh-sync-scripts/scripts/blueos-push-check-pr.sh"
       - name: Create or update monorepo pull request
         id: update-pr
-        if: ${{ steps.josh-sync.outputs.push_result == 'push-finished' }}
+        if: ${{ steps.josh-sync.outputs.push_result == 'push-finished' && steps.check-pr.outputs.should_create_pr == 'true' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           APPROVAL_GITHUB_TOKEN: ${{ secrets.approval-user-token }}

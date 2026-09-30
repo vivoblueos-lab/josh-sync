@@ -117,6 +117,17 @@ CI-owned branch in the configured BlueOS monorepo. It creates a monorepo pull re
 the existing pull request for that exact head and base branch. If the full filtered trees already
 match, including `blueos-version`, the workflow succeeds without changing the branch or PR.
 
+After a successful push, the workflow compares the configured monorepo base branch with the
+pushed sync branch using the GitHub compare API. If exactly one file changed and its basename
+is `blueos-version` (at the root or in any directory), it skips creating or updating the PR,
+including approval and auto-merge. Renames count both the old and new paths. Changes to any
+other file, or to multiple version files, continue through the normal PR flow. A comparison
+failure fails the workflow rather than silently skipping a PR.
+
+The sync branch remains pushed in this case; `push_result` is `push-finished` and `pr_url` is
+empty. This saves CI triggered by a new PR, but does not prevent CI triggered by the branch
+push or by updating a branch that already has an open PR.
+
 Use [`blueos-push.example.yml`](blueos-push.example.yml) as the starting point for a subtree
 repository. The example pins the reusable workflow, its scripts, and the installed binary to the
 same immutable commit; keep those SHA values in sync when updating the revision.
