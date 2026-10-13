@@ -1,6 +1,6 @@
-# BlueOS Josh sync utilities
+# BlueKernel Josh sync utilities
 This repository contains a binary utility for performing [Josh](https://github.com/josh-project/josh)
-synchronizations (pull and push) between a subtree repository and the BlueOS monorepo configured in that subtree.
+synchronizations (pull and push) between a subtree repository and the BlueKernel monorepo configured in that subtree.
 
 ## Installation
 Install a specific commit of the binary so that it matches the reusable workflow revision:
@@ -20,17 +20,17 @@ For a Natural-selection1 trial, a kernel mapping looks like this:
 ```toml
 org = "Natural-selection1"
 repo = "kernel"
-upstream-repo = "Natural-selection1/blueos-mono"
+upstream-repo = "Natural-selection1/bluekernel-mono"
 upstream-branch = "main"
 path = "kernel"
 filter-version = 2
 ```
 
-For production, change the reviewed `upstream-repo` to `vivoblueos/blueos` (and `org` to `vivoblueos` if the subtree also moves). Do not pass a different upstream from CI.
+For production, change the reviewed `upstream-repo` to `vivoblueos/bluekernel` (and `org` to `vivoblueos` if the subtree also moves). Do not pass a different upstream from CI.
 
 If you need to specify a more complex Josh `filter`, use `filter` field in the configuration file instead of the `path` field.
 
-The `init` command will also create an empty `blueos-version` file (if it doesn't already exist) that stores the last configured monorepo SHA that was synced in the subtree.
+The `init` command will also create an empty `bluekernel-version` file (if it doesn't already exist) that stores the last configured monorepo SHA that was synced in the subtree.
 
 ### Repository mapping examples
 
@@ -71,14 +71,14 @@ You can also configure a set of postprocessing operations to be performed after 
 
 ## Performing push
 
-A push operation takes changes performed in the subtree repository and merges them into the subtree subdirectory of the configured BlueOS monorepo. After performing a push, a PR is sent against that monorepo's configured `upstream-branch`.
+A push operation takes changes performed in the subtree repository and merges them into the subtree subdirectory of the configured BlueKernel monorepo. After performing a push, a PR is sent against that monorepo's configured `upstream-branch`.
 
 1) Checkout the latest default branch of the subtree
 2) Run `vivoblueos-josh-sync push <branch> <your-github-username>`
 
 - The branch with the push contents will be created in the `<your-github-username>/<configured-monorepo-name>` fork, in the `<branch>` branch.
 
-3) Send a PR to the configured BlueOS monorepo.
+3) Send a PR to the configured BlueKernel monorepo.
 
 ## Automating pulls on CI
 
@@ -88,9 +88,10 @@ This repository contains a reusable workflow for performing the `pull` operation
 2) Performs a `pull` operation
 3) Either creates a new PR (if it did not exist) with the resulting pull branch or force-pushes to an existing PR on the subtree repository
 
-Use [`blueos-pull.example.yml`](blueos-pull.example.yml) as the starting point for a subtree
-repository. The example pins the reusable workflow, its scripts, and the installed binary to the
-same immutable commit; keep those SHA values in sync when updating the revision.
+Use [`bluekernel-pull.example.yml`](bluekernel-pull.example.yml) as the starting point for a subtree
+repository. Replace both `<josh-sync-commit>` placeholders with the same full immutable commit
+SHA containing these workflows; this pins the workflow, its scripts, and the installed
+binary together. Keep those SHA values in sync when updating the revision.
 
 You will need to have a GitHub App configured on the repository with write permissions for
 contents and pull requests. Synchronization PRs are labeled `josh-sync` by default; use
@@ -111,19 +112,19 @@ repository's configured requirements. A conflicting PR is left open and reported
 workflow.
 
 Automated merge commits use a single-line message: `Sync kernel subtree changes (#42)`
-for a push, or `Sync changes from blueos repo (#497)` for a pull. The subtree name
+for a push, or `Sync changes from bluekernel repo (#497)` for a pull. The subtree name
 comes from `repo`, and the source monorepo name comes from `upstream-repo` in
 `josh-sync.toml`. The default GitHub merge commit body is omitted.
 
 ## Automating pushes on CI
 
-The reusable `blueos-push.yml` workflow pushes the caller's default-branch state into a stable,
-CI-owned branch in the configured BlueOS monorepo. It creates a monorepo pull request or updates
+The reusable `bluekernel-push.yml` workflow pushes the caller's default-branch state into a stable,
+CI-owned branch in the configured BlueKernel monorepo. It creates a monorepo pull request or updates
 the existing pull request for that exact head and base branch. If the full filtered trees already
-match, including `blueos-version`, the workflow succeeds without changing the branch or PR.
+match, including `bluekernel-version`, the workflow succeeds without changing the branch or PR.
 
-Reverse conversion uses a unique temporary branch named `blueos-josh-stage-*`, based on the
-commit recorded in `blueos-version`. The synchronizer verifies the converted commit by fetching
+Reverse conversion uses a unique temporary branch named `bluekernel-josh-stage-*`, based on the
+commit recorded in `bluekernel-version`. The synchronizer verifies the converted commit by fetching
 its subtree back through Josh before publishing it to the sync branch in a single push. This
 keeps an existing PR open instead of temporarily resetting its branch to the upstream base.
 Publication uses an explicit `--force-with-lease`, including when the sync branch did not exist;
@@ -136,7 +137,7 @@ Temporary branch pushes may still trigger workflows configured for all branch pu
 
 After a successful push, the workflow compares the configured monorepo base branch with the
 pushed sync branch using the GitHub compare API. If exactly one file changed and its basename
-is `blueos-version` (at the root or in any directory), it skips creating or updating the PR,
+is `bluekernel-version` (at the root or in any directory), it skips creating or updating the PR,
 including approval and auto-merge. Renames count both the old and new paths. Changes to any
 other file, or to multiple version files, continue through the normal PR flow. A comparison
 failure fails the workflow rather than silently skipping a PR.
@@ -145,9 +146,10 @@ The sync branch remains pushed in this case; `push_result` is `push-finished` an
 empty. This saves CI triggered by a new PR, but does not prevent CI triggered by the branch
 push or by updating a branch that already has an open PR.
 
-Use [`blueos-push.example.yml`](blueos-push.example.yml) as the starting point for a subtree
-repository. The example pins the reusable workflow, its scripts, and the installed binary to the
-same immutable commit; keep those SHA values in sync when updating the revision.
+Use [`bluekernel-push.example.yml`](bluekernel-push.example.yml) as the starting point for a subtree
+repository. Replace both `<josh-sync-commit>` placeholders with the same full immutable commit
+SHA containing these workflows; this pins the workflow, its scripts, and the installed
+binary together. Keep those SHA values in sync when updating the revision.
 
 The GitHub App must be installed on the configured monorepo with repository contents and pull
 request write permissions. The generated PR is labeled `josh-sync` by default. The
@@ -162,7 +164,7 @@ josh-sync confirmation prompts and uses each prompt's safe default: a missing lo
 checkout is cloned, while the optional local `gh` pull-request prompt is declined. The push step
 also disables Git credential prompts so missing credentials fail immediately instead of blocking CI.
 
-See [test.md](test.md) for the Natural-selection1 trial sequence and the production migration boundary.
+See [test.md](test.md) for the Natural-selection1 trial sequence and production configuration.
 
 ## Git peculiarities
 
@@ -179,7 +181,7 @@ insteadOf = "https://github.com/"
 
 For simplicity (ease of implementation purposes), the josh-sync script simply calls out to system git. This means that the git invocation may be influenced by global (or local) git configuration.
 
-You may observe "Nothing to pull" even if you *know* blueos-pull has something to pull if your global git config sets `fetch.prunetags = true` (and possibly other configurations may cause unexpected outcomes).
+You may observe "Nothing to pull" even if you *know* bluekernel-pull has something to pull if your global git config sets `fetch.prunetags = true` (and possibly other configurations may cause unexpected outcomes).
 
 To minimize the likelihood of this happening, you may wish to keep a separate *minimal* git config that *only* has `[user]` entries from global git config, then repoint system git to use the minimal git config instead. E.g.
 

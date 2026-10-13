@@ -10,28 +10,28 @@ Start with one mapping in the Natural-selection1 trial environment:
 ```toml
 org = "Natural-selection1"
 repo = "kernel"
-upstream-repo = "Natural-selection1/blueos-mono"
+upstream-repo = "Natural-selection1/bluekernel-mono"
 upstream-branch = "main"
 path = "kernel"
 filter-version = 2
 ```
 
 `upstream-repo` and `upstream-branch` select the source for both directions. The reverse push
-uses the repository name portion (`blueos-mono`) when targeting a contributor's fork.
+uses the repository name portion (`bluekernel-mono`) when targeting a contributor's fork.
 
 The production migration changes the reviewed values to:
 
 ```toml
 org = "vivoblueos"
-upstream-repo = "vivoblueos/blueos"
+upstream-repo = "vivoblueos/bluekernel"
 ```
 
-Do not reuse a trial `blueos-version` value in production; bootstrap a new baseline from a
+Do not reuse a trial `bluekernel-version` value in production; bootstrap a new baseline from a
 confirmed equal tree in the production repositories.
 
 ## Local trial sequence
 
-1. Create the tracked mapping and `blueos-version` through ordinary PRs in the subtree and the
+1. Create the tracked mapping and `bluekernel-version` through ordinary PRs in the subtree and the
    corresponding monorepo path. Confirm the two trees have the same hash before writing the
    baseline.
 2. On a throwaway subtree branch, run `vivoblueos-josh-sync pull --upstream-commit <trial-sha>`.
@@ -53,7 +53,7 @@ Pin the reusable workflow and the installed binary to the same immutable commit:
 ```yaml
 jobs:
   pull:
-    uses: Natural-selection1/josh-sync/.github/workflows/blueos-pull.yml@<josh-sync-commit>
+    uses: Natural-selection1/josh-sync/.github/workflows/bluekernel-pull.yml@<josh-sync-commit>
     with:
       github-app-id: ${{ vars.APP_CLIENT_ID }}
       pr-author: "<your-app>[bot]"

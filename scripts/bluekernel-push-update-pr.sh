@@ -3,7 +3,7 @@ set -euo pipefail
 
 SOURCE_SHA="$(git rev-parse HEAD)"
 TITLE="$SUBREPO subtree update"
-BODY_FILE="$RUNNER_TEMP/blueos-push-pr-body.md"
+BODY_FILE="$RUNNER_TEMP/bluekernel-push-pr-body.md"
 cat > "$BODY_FILE" <<EOF
 Subtree update of \`$SUBREPO\` to https://github.com/$GITHUB_REPOSITORY/commit/$SOURCE_SHA.
 
@@ -12,7 +12,7 @@ Created using vivoblueos-josh-sync.
 Do NOT amend/squash/rebase any of the commits produced by this tool; that can badly break future syncs.
 EOF
 
-PULL_REQUESTS_FILE="$RUNNER_TEMP/blueos-push-prs.json"
+PULL_REQUESTS_FILE="$RUNNER_TEMP/bluekernel-push-prs.json"
 gh api \
   --method GET \
   "repos/$UPSTREAM/pulls" \
@@ -65,9 +65,9 @@ jq -n --arg label "$PR_LABEL" '{labels: [$label]}' | \
     "repos/$UPSTREAM/issues/$PR_NUMBER/labels" \
     --input - >/dev/null
 
-bash "$(dirname "$0")/blueos-approve-pr.sh" \
+bash "$(dirname "$0")/bluekernel-approve-pr.sh" \
   "$PR_URL" "$UPSTREAM" "$BRANCH" "$UPSTREAM_BRANCH" "$PR_AUTHOR"
-bash "$(dirname "$0")/blueos-enable-auto-merge.sh" \
+bash "$(dirname "$0")/bluekernel-enable-auto-merge.sh" \
   "$PR_URL" "Sync $SUBREPO subtree changes"
 
 echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"

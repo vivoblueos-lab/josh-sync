@@ -10,27 +10,27 @@ use std::process::Command;
 
 pub const NO_REBASE_WARN: &str = "Do NOT amend/squash/rebase any of the commits produced by this tool; that can badly break future syncs.";
 
-pub enum BlueosPullError {
+pub enum BluekernelPullError {
     /// No changes are available to be pulled.
     NothingToPull,
-    /// A BlueOS pull has failed, probably a git operation error has occurred.
+    /// A BlueKernel pull has failed, probably a git operation error has occurred.
     PullFailed(anyhow::Error),
 }
 
-impl From<anyhow::Error> for BlueosPullError {
+impl From<anyhow::Error> for BluekernelPullError {
     fn from(error: Error) -> Self {
         Self::PullFailed(error)
     }
 }
 
-pub enum BlueosPushError {
+pub enum BluekernelPushError {
     /// The subtree projection already matches the configured monorepo branch.
     NothingToPush,
     /// A reverse synchronization operation failed.
     PushFailed(anyhow::Error),
 }
 
-impl From<anyhow::Error> for BlueosPushError {
+impl From<anyhow::Error> for BluekernelPushError {
     fn from(error: Error) -> Self {
         Self::PushFailed(error)
     }
@@ -69,13 +69,13 @@ impl GitSync {
         }
     }
 
-    pub fn blueos_pull(
+    pub fn bluekernel_pull(
         &self,
         upstream_repo: String,
         upstream_branch: String,
         upstream_commit: Option<String>,
         allow_noop: bool,
-    ) -> Result<PullResult, BlueosPullError> {
+    ) -> Result<PullResult, BluekernelPullError> {
         // The upstream commit that we want to pull
         let upstream_sha = if let Some(sha) = upstream_commit {
             sha
@@ -94,7 +94,7 @@ impl GitSync {
                 .next()
                 .unwrap_or_else(|| {
                     panic!(
-                        "Could not obtain BlueOS monorepo branch `{upstream_branch}` from remote: '{out}'"
+                        "Could not obtain BlueKernel monorepo branch `{upstream_branch}` from remote: '{out}'"
                     )
                 })
                 .to_owned()
@@ -130,7 +130,7 @@ impl GitSync {
         if let Some(previous_base_commit) = self.context.last_upstream_sha.as_ref()
             && *previous_base_commit == upstream_sha
         {
-            return Err(BlueosPullError::NothingToPull);
+            return Err(BluekernelPullError::NothingToPull);
         }
 
         // Create a checkpoint to which we reset if something unusual happens
@@ -140,7 +140,7 @@ impl GitSync {
         // the merge has confused the heck out of josh in the past.
         // We pass `--no-verify` to avoid running git hooks.
         // We do this before the merge so that if there are merge conflicts, we have
-        // the right blueos-version file while resolving them.
+        // the right bluekernel-version file while resolving them.
         std::fs::write(
             &self.context.last_upstream_sha_path,
             format!("{upstream_sha}\n"),
@@ -155,22 +155,22 @@ impl GitSync {
         let prep_message = format!(
             r#"Prepare for merging from {upstream_repo}
 
-This updates the blueos-version file to {upstream_sha}."#,
+This updates the bluekernel-version file to {upstream_sha}."#,
         );
 
-        let blueos_version_path = self
+        let bluekernel_version_path = self
             .context
             .last_upstream_sha_path
             .to_string_lossy()
             .to_string();
         // Add the file to git index, in case this is the first time we perform the sync
         // Otherwise `git commit <file>` below wouldn't work.
-        run_command(["git", "add", &blueos_version_path], self.verbose)?;
+        run_command(["git", "add", &bluekernel_version_path], self.verbose)?;
         run_command(
             [
                 "git",
                 "commit",
-                &blueos_version_path,
+                &bluekernel_version_path,
                 "--no-verify",
                 "-m",
                 &prep_message,
@@ -179,7 +179,7 @@ This updates the blueos-version file to {upstream_sha}."#,
         )
         .context("cannot create preparation commit")?;
 
-        // Fetch the given BlueOS monorepo commit.
+        // Fetch the given BlueKernel monorepo commit.
         run_command(["git", "fetch", &josh_url], self.verbose)
             .context("cannot fetch git state through Josh")?;
 
@@ -244,7 +244,7 @@ After you fix the conflicts, `git add` the changes and run `git merge --continue
             );
             eprintln!("{NO_REBASE_WARN}");
             git_reset.disarm();
-            return Err(BlueosPullError::PullFailed(error));
+            return Err(BluekernelPullError::PullFailed(error));
         }
 
         // Now detect if something has actually been pulled
@@ -253,15 +253,15 @@ After you fix the conflicts, `git add` the changes and run `git merge --continue
         // This is the easy case, no merge was performed, so we bail, unless `allow_noop` is true
         if current_sha == sha_pre_merge && !allow_noop {
             eprintln!("No merge was performed, no changes to pull were found. Rolling back.");
-            return Err(BlueosPullError::NothingToPull);
+            return Err(BluekernelPullError::NothingToPull);
         }
 
         // But it can be more tricky - we can have only empty merge/rollup merge commits from
-        // the BlueOS monorepo, so a merge was created, but the in-tree diff can still be empty.
+        // the BlueKernel monorepo, so a merge was created, but the in-tree diff can still be empty.
         // In that case we also bail, unless `allow_noop` is true.
         if self.has_empty_diff(&sha_pre_merge) && !allow_noop {
             eprintln!("Only empty changes were pulled. Rolling back.");
-            return Err(BlueosPullError::NothingToPull);
+            return Err(BluekernelPullError::NothingToPull);
         }
 
         println!("Pull finished! Current HEAD is {current_sha}");
@@ -290,13 +290,13 @@ After you fix the conflicts, `git add` the changes and run `git merge --continue
         })
     }
 
-    pub fn blueos_push(
+    pub fn bluekernel_push(
         &self,
         username: &str,
         branch: &str,
         update_existing: bool,
         no_interact: bool,
-    ) -> Result<(), BlueosPushError> {
+    ) -> Result<(), BluekernelPushError> {
         ensure_clean_git_state(self.verbose)?;
 
         let base_upstream_sha = self
@@ -304,7 +304,9 @@ After you fix the conflicts, `git add` the changes and run `git merge --continue
             .last_upstream_sha
             .clone()
             .filter(|sha| !sha.is_empty())
-            .ok_or_else(|| anyhow::anyhow!("blueos-version does not contain an upstream SHA"))?;
+            .ok_or_else(|| {
+                anyhow::anyhow!("bluekernel-version does not contain an upstream SHA")
+            })?;
         let upstream_repo = &self.context.config.upstream_repo;
         let fork_repo = format!("{username}/{}", self.context.config.upstream_repo_name()?);
 
@@ -348,8 +350,8 @@ After you fix the conflicts, `git add` the changes and run `git merge --continue
             .context("failed to resolve the current upstream subtree")?;
         ensure_push_needed(&local_head, &upstream_head, &current_dir, self.verbose)?;
 
-        let blueos_git = prepare_blueos_checkout(upstream_repo, no_interact, self.verbose)
-            .context("cannot prepare BlueOS monorepo checkout")?;
+        let bluekernel_git = prepare_bluekernel_checkout(upstream_repo, no_interact, self.verbose)
+            .context("cannot prepare BlueKernel monorepo checkout")?;
 
         // Convert against the last pulled base without exposing that intermediate
         // state on the PR branch. GitHub can close the PR when its head is reset
@@ -364,13 +366,13 @@ After you fix the conflicts, `git add` the changes and run `git merge --continue
                 &format!("https://github.com/{upstream_repo}"),
                 &base_upstream_sha,
             ],
-            &blueos_git,
+            &bluekernel_git,
             self.verbose,
         )
         .context("cannot download latest upstream SHA")?;
 
         publish_staged_update(
-            &blueos_git,
+            &bluekernel_git,
             &user_upstream_url,
             branch,
             &base_upstream_sha,
@@ -384,12 +386,12 @@ After you fix the conflicts, `git add` the changes and run `git merge --continue
                 )?;
                 run_command_at(
                     ["git", "fetch", &user_upstream_url, stage_branch],
-                    &blueos_git,
+                    &bluekernel_git,
                     self.verbose,
                 )?;
                 let candidate = run_command_at(
                     ["git", "rev-parse", "FETCH_HEAD"],
-                    &blueos_git,
+                    &bluekernel_git,
                     self.verbose,
                 )?;
                 let candidate_url = josh.git_url(&fork_repo, Some(&candidate), &filter);
@@ -398,7 +400,7 @@ After you fix the conflicts, `git add` the changes and run `git merge --continue
             },
         )
         .context("cannot publish the verified sync branch")?;
-        println!("Published verified changes to {branch}. Please create a BlueOS monorepo PR.");
+        println!("Published verified changes to {branch}. Please create a BlueKernel monorepo PR.");
         println!("{NO_REBASE_WARN}");
 
         Ok(())
@@ -567,7 +569,7 @@ struct RemoteStageBranch {
 impl RemoteStageBranch {
     fn create(workdir: &Path, remote: &str, base: &str, verbose: bool) -> anyhow::Result<Self> {
         let reservation = tempfile::Builder::new()
-            .prefix("blueos-josh-stage-")
+            .prefix("bluekernel-josh-stage-")
             .rand_bytes(16)
             .tempdir()?;
         let branch = reservation
@@ -644,9 +646,9 @@ fn ensure_push_needed(
     upstream_head: &str,
     workdir: &Path,
     verbose: bool,
-) -> Result<(), BlueosPushError> {
+) -> Result<(), BluekernelPushError> {
     if refs_have_same_tree(local_head, upstream_head, workdir, verbose)? {
-        return Err(BlueosPushError::NothingToPush);
+        return Err(BluekernelPushError::NothingToPush);
     }
     Ok(())
 }
@@ -654,7 +656,7 @@ fn ensure_push_needed(
 fn validate_roundtrip(expected: &str, actual: &str) -> anyhow::Result<()> {
     if expected != actual {
         return Err(anyhow::anyhow!(
-            "Josh created a non-roundtrip push! Do NOT merge this into the BlueOS monorepo!\n\
+            "Josh created a non-roundtrip push! Do NOT merge this into the BlueKernel monorepo!\n\
             Expected {expected}, got {actual}."
         ));
     }
@@ -670,34 +672,34 @@ fn get_josh_filter(verbose: bool) -> anyhow::Result<JoshFilter> {
     }
 }
 
-/// Find a BlueOS monorepo we can do our push preparation in.
-fn prepare_blueos_checkout(
+/// Find a BlueKernel monorepo we can do our push preparation in.
+fn prepare_bluekernel_checkout(
     upstream_repo: &str,
     no_interact: bool,
     verbose: bool,
 ) -> anyhow::Result<PathBuf> {
-    if let Ok(blueos_git) = std::env::var("BLUEOS_GIT") {
-        let blueos_git = PathBuf::from(blueos_git);
+    if let Ok(bluekernel_git) = std::env::var("BLUEKERNEL_GIT") {
+        let bluekernel_git = PathBuf::from(bluekernel_git);
         assert!(
-            blueos_git.is_dir(),
-            "BlueOS monorepo checkout path must be a directory"
+            bluekernel_git.is_dir(),
+            "BlueKernel monorepo checkout path must be a directory"
         );
-        return Ok(blueos_git);
+        return Ok(bluekernel_git);
     };
 
     // Otherwise, download it
-    let path = "blueos-checkout";
+    let path = "bluekernel-checkout";
     if !Path::new(path).join(".git").exists() {
         if prompt(
             &format!(
-                "Path to a BlueOS monorepo checkout is not configured via the BLUEOS_GIT environment variable, and {path} directory was not found. Do you want to download a BlueOS checkout into {path}?",
+                "Path to a BlueKernel monorepo checkout is not configured via the BLUEKERNEL_GIT environment variable, and {path} directory was not found. Do you want to download a BlueKernel checkout into {path}?",
             ),
             // Automatically clone when interaction is disabled or on CI.
             true,
             no_interact,
         ) {
             println!(
-                "Cloning the BlueOS monorepo into `{path}`. Use the BLUEOS_GIT environment variable to override the location of the checkout"
+                "Cloning the BlueKernel monorepo into `{path}`. Use the BLUEKERNEL_GIT environment variable to override the location of the checkout"
             );
             // Stream stdout/stderr to the terminal, so that the user sees clone progress
             stream_command(
@@ -710,10 +712,10 @@ fn prepare_blueos_checkout(
                 ],
                 verbose,
             )
-            .context("cannot clone the BlueOS monorepo")?;
+            .context("cannot clone the BlueKernel monorepo")?;
         } else {
             return Err(anyhow::anyhow!(
-                "cannot continue without a BlueOS monorepo checkout"
+                "cannot continue without a BlueKernel monorepo checkout"
             ));
         }
     }
@@ -983,7 +985,7 @@ mod tests {
             &[
                 "for-each-ref",
                 "--format=%(refname)",
-                "refs/heads/blueos-josh-stage-*",
+                "refs/heads/bluekernel-josh-stage-*",
             ],
         )
     }
@@ -1163,7 +1165,7 @@ mod tests {
         let base = commit_file(&worktree, "file", "base\n", "base");
         let candidate = commit_file(&worktree, "file", "candidate\n", "candidate");
         let hook = remote.join("hooks/update");
-        fs::write(&hook, "#!/bin/sh\ncase \"$1:$3\" in refs/heads/blueos-josh-stage-*:0000000000000000000000000000000000000000) exit 1;; esac\nexit 0\n").unwrap();
+        fs::write(&hook, "#!/bin/sh\ncase \"$1:$3\" in refs/heads/bluekernel-josh-stage-*:0000000000000000000000000000000000000000) exit 1;; esac\nexit 0\n").unwrap();
         fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
         let remote_url = remote.to_str().unwrap();
         publish_staged_update(&worktree, remote_url, "sync", &base, None, false, |_| {
@@ -1189,7 +1191,7 @@ mod tests {
     }
 
     #[test]
-    fn tree_comparison_includes_blueos_version() {
+    fn tree_comparison_includes_bluekernel_version() {
         let (_temp, worktree, _remote) = test_repository();
         let first = commit_file(&worktree, "file", "same\n", "first");
         git(
@@ -1197,14 +1199,18 @@ mod tests {
             &["commit", "--allow-empty", "-qm", "empty"],
         );
         let same_tree = git(&worktree, &["rev-parse", "HEAD"]);
-        let version_change =
-            commit_file(&worktree, "blueos-version", "0123456789abcdef\n", "version");
+        let version_change = commit_file(
+            &worktree,
+            "bluekernel-version",
+            "0123456789abcdef\n",
+            "version",
+        );
 
         assert!(refs_have_same_tree(&first, &same_tree, &worktree, false).unwrap());
         assert!(!refs_have_same_tree(&same_tree, &version_change, &worktree, false).unwrap());
         assert!(matches!(
             ensure_push_needed(&first, &same_tree, &worktree, false),
-            Err(BlueosPushError::NothingToPush)
+            Err(BluekernelPushError::NothingToPush)
         ));
         assert!(ensure_push_needed(&same_tree, &version_change, &worktree, false).is_ok());
     }

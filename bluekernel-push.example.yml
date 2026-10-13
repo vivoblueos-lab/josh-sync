@@ -1,4 +1,4 @@
-name: Push kernel changes to BlueOS
+name: Push kernel changes to BlueKernel
 on:
   push:
     # 哪个分支更新时推送同步, libc 的 blueos-dev 比较特殊
@@ -8,17 +8,17 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: blueos-push-${{ github.repository }}
+  group: bluekernel-push-${{ github.repository }}
   cancel-in-progress: false
 jobs:
   push:
     if: ${{ vars.JOSH_SYNC_ENABLED == 'true' }}
-    uses: vivoblueos-lab/josh-sync/.github/workflows/blueos-push.yml@09791fc8669446bd38b2fd5a5dacbfae8ad4c51e
+    uses: vivoblueos-lab/josh-sync/.github/workflows/bluekernel-push.yml@<josh-sync-commit>
     with:
       github-app-client-id: ${{ vars.JOSH_SYNC_APP_CLIENT_ID }}
       pr-author: "blueos-josh-sync[bot]"
       josh-sync-repository: vivoblueos-lab/josh-sync
-      josh-sync-revision: 09791fc8669446bd38b2fd5a5dacbfae8ad4c51e
+      josh-sync-revision: <josh-sync-commit>
     secrets:
       github-app-secret: ${{ secrets.JOSH_SYNC_APP_PRIVATE_KEY }}
       approval-user-token: ${{ secrets.JOSH_SYNC_APPROVAL_USER_TOKEN }}

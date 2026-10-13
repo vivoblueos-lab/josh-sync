@@ -11,13 +11,13 @@ RESULT="$(gh pr list \
   --author "$PR_AUTHOR" \
   --state open \
   --json title \
-  --jq 'map(select(.title=="BlueOS pull update")) | length')"
+  --jq 'map(select(.title=="BlueKernel pull update")) | length')"
 if [ "$RESULT" -eq 0 ]; then
   echo "Creating new pull request"
   PR_URL="$(gh pr create \
     -B "$PR_BASE_BRANCH" \
-    --title 'BlueOS pull update' \
-    --body 'Latest update from the BlueOS monorepo.' \
+    --title 'BlueKernel pull update' \
+    --body 'Latest update from the BlueKernel monorepo.' \
     --label "$PR_LABEL")"
   echo "Created pull request ${PR_URL}"
   echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
@@ -26,7 +26,7 @@ else
     --author "$PR_AUTHOR" \
     --state open \
     --json url,title \
-    --jq 'map(select(.title=="BlueOS pull update")) | .[0].url')"
+    --jq 'map(select(.title=="BlueKernel pull update")) | .[0].url')"
   PR_NUMBER="${PR_URL##*/}"
   jq -n --arg label "$PR_LABEL" '{labels: [$label]}' | \
     gh api \
@@ -37,7 +37,7 @@ else
   echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
 fi
 
-bash "$(dirname "$0")/blueos-approve-pr.sh" \
+bash "$(dirname "$0")/bluekernel-approve-pr.sh" \
   "$PR_URL" "$GITHUB_REPOSITORY" "$PR_HEAD_BRANCH" "$PR_BASE_BRANCH" "$PR_AUTHOR"
 UPSTREAM_REPOSITORY="$(python3 - <<'PY'
 import re
@@ -50,5 +50,5 @@ if not isinstance(upstream, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-
 print(upstream.split("/")[1])
 PY
 )"
-bash "$(dirname "$0")/blueos-enable-auto-merge.sh" \
+bash "$(dirname "$0")/bluekernel-enable-auto-merge.sh" \
   "$PR_URL" "Sync changes from $UPSTREAM_REPOSITORY repo"

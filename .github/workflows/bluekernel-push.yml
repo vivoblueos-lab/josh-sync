@@ -1,4 +1,4 @@
-name: 'BlueOS Subtree Push'
+name: 'BlueKernel Subtree Push'
 on:
   workflow_call:
     inputs:
@@ -75,10 +75,10 @@ jobs:
             ~/.cargo/git
             ~/.cargo/registry
             /home/runner/.cache/vivoblueos-josh
-          key: blueos-josh-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.josh-sync-revision }}-push
+          key: bluekernel-josh-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.josh-sync-revision }}-push
           restore-keys: |
-            blueos-josh-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.josh-sync-revision }}-
-            blueos-josh-v1-${{ runner.os }}-${{ runner.arch }}-
+            bluekernel-josh-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.josh-sync-revision }}-
+            bluekernel-josh-v1-${{ runner.os }}-${{ runner.arch }}-
       - name: Install vivoblueos-josh-sync
         run: |
           cargo +stable install --locked \
@@ -100,7 +100,7 @@ jobs:
           JOSH_SYNC_REPOSITORY: ${{ inputs.josh-sync-repository }}
           JOSH_SYNC_REVISION: ${{ inputs.josh-sync-revision }}
           REQUESTED_BRANCH: ${{ inputs.branch-name }}
-        run: python3 "$GITHUB_WORKSPACE/.github/josh-sync-scripts/scripts/blueos-push-read-config.py"
+        run: python3 "$GITHUB_WORKSPACE/.github/josh-sync-scripts/scripts/bluekernel-push-read-config.py"
       - name: Create monorepo GitHub App token
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
@@ -114,7 +114,7 @@ jobs:
       - name: Configure Git credentials
         env:
           APP_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: bash "$GITHUB_WORKSPACE/.github/josh-sync-scripts/scripts/blueos-push-configure-credentials.sh"
+        run: bash "$GITHUB_WORKSPACE/.github/josh-sync-scripts/scripts/bluekernel-push-configure-credentials.sh"
       - name: Set bot Git identity
         run: |
           git config --global user.name 'The vivoblueos-josh-sync Cronjob Bot'
@@ -152,7 +152,7 @@ jobs:
           BRANCH: ${{ steps.config.outputs.branch }}
           UPSTREAM: ${{ steps.config.outputs.upstream }}
           UPSTREAM_BRANCH: ${{ steps.config.outputs.upstream-branch }}
-        run: bash "$GITHUB_WORKSPACE/.github/josh-sync-scripts/scripts/blueos-push-check-pr.sh"
+        run: bash "$GITHUB_WORKSPACE/.github/josh-sync-scripts/scripts/bluekernel-push-check-pr.sh"
       - name: Create or update monorepo pull request
         id: update-pr
         if: ${{ steps.josh-sync.outputs.push_result == 'push-finished' && steps.check-pr.outputs.should_create_pr == 'true' }}
@@ -167,7 +167,7 @@ jobs:
           UPSTREAM: ${{ steps.config.outputs.upstream }}
           UPSTREAM_BRANCH: ${{ steps.config.outputs.upstream-branch }}
           UPSTREAM_OWNER: ${{ steps.config.outputs.upstream-owner }}
-        run: bash "$GITHUB_WORKSPACE/.github/josh-sync-scripts/scripts/blueos-push-update-pr.sh"
+        run: bash "$GITHUB_WORKSPACE/.github/josh-sync-scripts/scripts/bluekernel-push-update-pr.sh"
       - name: Remove temporary credentials
         if: ${{ always() }}
         run: |

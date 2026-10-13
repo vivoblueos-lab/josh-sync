@@ -8,15 +8,15 @@ pub struct JoshConfig {
     #[serde(default = "default_org")]
     pub org: String,
     pub repo: String,
-    /// GitHub owner/name of the BlueOS monorepo from which this subtree is synchronized.
-    /// For example `Natural-selection1/blueos-mono` during a trial or `vivoblueos/blueos`
+    /// GitHub owner/name of the BlueKernel monorepo from which this subtree is synchronized.
+    /// For example `Natural-selection1/bluekernel-mono` during a trial or `vivoblueos/bluekernel`
     /// in production.
     pub upstream_repo: String,
-    /// Branch in the BlueOS monorepo to synchronize.
+    /// Branch in the BlueKernel monorepo to synchronize.
     /// We resolve this branch to a commit SHA before Josh is invoked.
     pub upstream_branch: String,
-    /// Relative path where the subtree is located in the BlueOS monorepo.
-    /// For example `src/doc/blueos-dev-guide`.
+    /// Relative path where the subtree is located in the BlueKernel monorepo.
+    /// For example `src/doc/bluekernel-dev-guide`.
     pub path: Option<String>,
     /// Optional filter specification for Josh.
     /// It cannot be used together with `path`.
@@ -171,16 +171,16 @@ mod tests {
     #[test]
     fn obtains_the_monorepo_name_from_a_github_repository() {
         assert_eq!(
-            config("Natural-selection1/blueos-mono")
+            config("Natural-selection1/bluekernel-mono")
                 .upstream_repo_name()
                 .unwrap(),
-            "blueos-mono"
+            "bluekernel-mono"
         );
     }
 
     #[test]
     fn rejects_an_invalid_monorepo_repository() {
-        assert!(config("blueos-mono").upstream_repo_name().is_err());
+        assert!(config("bluekernel-mono").upstream_repo_name().is_err());
         assert!(config("owner/repo/extra").upstream_repo_name().is_err());
     }
 }

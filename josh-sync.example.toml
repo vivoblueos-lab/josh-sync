@@ -2,12 +2,12 @@
 #org = "vivoblueos"
 # Name of the repository
 repo = "kernel"
-# GitHub owner/name of the BlueOS monorepo. Keep this tracked in every subtree so a trial and
+# GitHub owner/name of the BlueKernel monorepo. Keep this tracked in every subtree so a trial and
 # production deployment have an explicit, reviewable source.
-upstream-repo = "<github-owner>/<blueos-monorepo>"
+upstream-repo = "<github-owner>/<bluekernel-monorepo>"
 # Branch to synchronize in the configured monorepo.
 upstream-branch = "main"
-# Path where the subtree is located in the configured BlueOS monorepo.
+# Path where the subtree is located in the configured BlueKernel monorepo.
 path = "kernel"
 
 # Optionally, you can specify the complete Josh filter for complex cases
@@ -30,9 +30,9 @@ filter-version = 2
 # If you are not doing a 1:1 mirror, set this to a filter that transforms your local
 # `HEAD` into a tree that exactly matches the upstream tree after the `filter`
 # is applied.
-# E.g., if the `filter` is ":/compiler/blueos_component:prefix=blueos_component",
+# E.g., if the `filter` is ":/compiler/bluekernel_component:prefix=bluekernel_component",
 # the `subtree-filter` should be:
-#subtree-filter = ":/blueos_component:prefix=blueos_component"
+#subtree-filter = ":/bluekernel_component:prefix=bluekernel_component"
 
 # Optionally, you can specify a set of commands executed after a successful pull.
 # If the executed command changes the local git state (performs some modifications to files that

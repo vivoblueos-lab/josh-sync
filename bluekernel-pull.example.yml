@@ -1,8 +1,8 @@
-name: Pull changes from BlueOS
+name: Pull changes from BlueKernel
 on:
   # 允许外部触发
   repository_dispatch:
-    types: [blueos-pull]
+    types: [bluekernel-pull]
   # 允许网页界面手动触发
   workflow_dispatch:
 permissions:
@@ -10,14 +10,14 @@ permissions:
   pull-requests: write
 # 并发控制
 concurrency:
-  group: blueos-pull
+  group: bluekernel-pull
   cancel-in-progress: false
 jobs:
   pull:
     # 允许一键关闭同步, 通常为组织变量
     if: ${{ vars.JOSH_SYNC_ENABLED == 'true' }}
     # 使用固定的workflow版本
-    uses: vivoblueos-lab/josh-sync/.github/workflows/blueos-pull.yml@09791fc8669446bd38b2fd5a5dacbfae8ad4c51e
+    uses: vivoblueos-lab/josh-sync/.github/workflows/bluekernel-pull.yml@<josh-sync-commit>
     with:
       # 这里的 JOSH_SYNC_APP_CLIENT_ID 和 JOSH_SYNC_APP_PRIVATE_KEY 是从组织/仓库变量和秘密中获取的
       github-app-client-id: ${{ vars.JOSH_SYNC_APP_CLIENT_ID }}
@@ -25,9 +25,9 @@ jobs:
       pr-author: "blueos-josh-sync[bot]"
       josh-sync-repository: vivoblueos-lab/josh-sync
       # 和上文的workflow版本保持一致
-      josh-sync-revision: 09791fc8669446bd38b2fd5a5dacbfae8ad4c51e
+      josh-sync-revision: <josh-sync-commit>
       # 用于放置同步提交的分支名
-      branch-name: blueos-pull
+      branch-name: bluekernel-pull
       # 这里填的是当前子仓库的默认分支, libc的 blueos-dev 比较特殊
       pr-base-branch: main
     secrets:

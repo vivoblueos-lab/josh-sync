@@ -5,12 +5,12 @@ use vivoblueos_josh_sync::SyncContext;
 use vivoblueos_josh_sync::config::{JoshConfig, load_config};
 use vivoblueos_josh_sync::josh::{JoshProxy, try_install_josh_proxy};
 use vivoblueos_josh_sync::sync::{
-    BlueosPullError, BlueosPushError, FilterVersion, GitSync, NO_REBASE_WARN,
+    BluekernelPullError, BluekernelPushError, FilterVersion, GitSync, NO_REBASE_WARN,
 };
 use vivoblueos_josh_sync::utils::{get_current_head_sha, prompt};
 
 const DEFAULT_CONFIG_PATH: &str = "josh-sync.toml";
-const DEFAULT_BLUEOS_VERSION_PATH: &str = "blueos-version";
+const DEFAULT_BLUEKERNEL_VERSION_PATH: &str = "bluekernel-version";
 
 #[derive(clap::Parser)]
 struct Args {
@@ -20,9 +20,9 @@ struct Args {
 
 #[derive(clap::Parser)]
 enum Command {
-    /// Initialize a config file and an empty `blueos-version` file for this repository.
+    /// Initialize a config file and an empty `bluekernel-version` file for this repository.
     Init,
-    /// Pull changes from the BlueOS monorepo configured in `josh-sync.toml`.
+    /// Pull changes from the BlueKernel monorepo configured in `josh-sync.toml`.
     /// This creates new commits that should be then merged into this subtree repository.
     Pull {
         /// Override the configured upstream repository for a local experiment.
@@ -35,8 +35,8 @@ enum Command {
         #[clap(long)]
         upstream_branch: Option<String>,
 
-        /// Override the BlueOS monorepo commit that we should pull from.
-        /// By default, josh-sync resolves the configured BlueOS monorepo branch.
+        /// Override the BlueKernel monorepo commit that we should pull from.
+        /// By default, josh-sync resolves the configured BlueKernel monorepo branch.
         #[clap(long)]
         upstream_commit: Option<String>,
 
@@ -49,9 +49,9 @@ enum Command {
         #[clap(flatten)]
         shared: SharedArgs,
     },
-    /// Push changes into `branch` of a fork of the configured BlueOS monorepo under the given
+    /// Push changes into `branch` of a fork of the configured BlueKernel monorepo under the given
     /// GitHub `username`.
-    /// The pushed branch should then be merged into the BlueOS monorepo.
+    /// The pushed branch should then be merged into the BlueKernel monorepo.
     Push {
         /// Branch that should be pushed to your remote
         branch: String,
@@ -74,9 +74,9 @@ struct SharedArgs {
     #[clap(long, default_value(DEFAULT_CONFIG_PATH))]
     config_path: PathBuf,
 
-    /// Path to a file storing the last synchronized BlueOS monorepo commit.
-    #[clap(long, default_value(DEFAULT_BLUEOS_VERSION_PATH))]
-    blueos_version_path: PathBuf,
+    /// Path to a file storing the last synchronized BlueKernel monorepo commit.
+    #[clap(long, default_value(DEFAULT_BLUEKERNEL_VERSION_PATH))]
+    bluekernel_version_path: PathBuf,
 
     /// Path to the josh-proxy binary to be used.
     /// If not specified, it will be installed automatically.
@@ -101,7 +101,7 @@ fn main() -> anyhow::Result<()> {
             let config = JoshConfig {
                 org: "vivoblueos".to_string(),
                 repo: "<repository-name>".to_string(),
-                upstream_repo: "<github-owner>/<blueos-monorepo>".to_string(),
+                upstream_repo: "<github-owner>/<bluekernel-monorepo>".to_string(),
                 upstream_branch: "main".to_string(),
                 path: Some("<relative-subtree-path>".to_string()),
                 filter: None,
@@ -114,13 +114,15 @@ fn main() -> anyhow::Result<()> {
                 .context("cannot write config")?;
             println!("Created config file at {DEFAULT_CONFIG_PATH}");
 
-            if !Path::new(DEFAULT_BLUEOS_VERSION_PATH).is_file() {
-                std::fs::write(DEFAULT_BLUEOS_VERSION_PATH, "")
-                    .context("cannot write blueos-version file")?;
-                println!("Created empty blueos-version file at {DEFAULT_BLUEOS_VERSION_PATH}");
+            if !Path::new(DEFAULT_BLUEKERNEL_VERSION_PATH).is_file() {
+                std::fs::write(DEFAULT_BLUEKERNEL_VERSION_PATH, "")
+                    .context("cannot write bluekernel-version file")?;
+                println!(
+                    "Created empty bluekernel-version file at {DEFAULT_BLUEKERNEL_VERSION_PATH}"
+                );
             } else {
                 println!(
-                    "{DEFAULT_BLUEOS_VERSION_PATH} already exists, not doing anything with it"
+                    "{DEFAULT_BLUEKERNEL_VERSION_PATH} already exists, not doing anything with it"
                 );
             }
         }
@@ -131,17 +133,18 @@ fn main() -> anyhow::Result<()> {
             allow_noop,
             shared,
         } => {
-            let ctx = load_context(&shared.config_path, &shared.blueos_version_path)?;
+            let ctx = load_context(&shared.config_path, &shared.bluekernel_version_path)?;
             let josh = get_josh_proxy(shared.josh_proxy, shared.verbose)?;
             let sync = GitSync::new(ctx.clone(), josh, shared.verbose);
             let upstream_repo = upstream_repo.unwrap_or_else(|| ctx.config.upstream_repo.clone());
             let upstream_branch =
                 upstream_branch.unwrap_or_else(|| ctx.config.upstream_branch.clone());
-            match sync.blueos_pull(upstream_repo, upstream_branch, upstream_commit, allow_noop) {
+            match sync.bluekernel_pull(upstream_repo, upstream_branch, upstream_commit, allow_noop)
+            {
                 Ok(result) => {
                     if !maybe_create_gh_pr(
                         &ctx.config.full_repo_name(),
-                        "BlueOS pull update",
+                        "BlueKernel pull update",
                         &result.merge_commit_message,
                         shared.no_interact,
                     )? {
@@ -151,13 +154,13 @@ fn main() -> anyhow::Result<()> {
                         );
                     }
                 }
-                Err(BlueosPullError::NothingToPull) => {
+                Err(BluekernelPullError::NothingToPull) => {
                     eprintln!("Nothing to pull");
                     if !allow_noop {
                         std::process::exit(2);
                     }
                 }
-                Err(BlueosPullError::PullFailed(error)) => {
+                Err(BluekernelPullError::PullFailed(error)) => {
                     eprintln!("Pull failure: {error:?}");
                     if !shared.verbose {
                         eprintln!("Rerun with `-v` to see executed commands");
@@ -172,16 +175,16 @@ fn main() -> anyhow::Result<()> {
             update_existing,
             shared,
         } => {
-            let ctx = load_context(&shared.config_path, &shared.blueos_version_path)?;
+            let ctx = load_context(&shared.config_path, &shared.bluekernel_version_path)?;
             let josh = get_josh_proxy(shared.josh_proxy, shared.verbose)?;
             let sync = GitSync::new(ctx.clone(), josh, shared.verbose);
-            match sync.blueos_push(&username, &branch, update_existing, shared.no_interact) {
+            match sync.bluekernel_push(&username, &branch, update_existing, shared.no_interact) {
                 Ok(()) => {}
-                Err(BlueosPushError::NothingToPush) => {
+                Err(BluekernelPushError::NothingToPush) => {
                     eprintln!("Nothing to push");
                     std::process::exit(2);
                 }
-                Err(BlueosPushError::PushFailed(error)) => {
+                Err(BluekernelPushError::PushFailed(error)) => {
                     if !shared.verbose {
                         eprintln!("Rerun with `-v` to see executed commands");
                     }
@@ -205,7 +208,7 @@ Created using vivoblueos-josh-sync.
             );
 
             println!(
-                r#"You can create the BlueOS monorepo PR using the following URL:
+                r#"You can create the BlueKernel monorepo PR using the following URL:
 https://github.com/{upstream_repo}/compare/{upstream_branch}...{username}:{branch}?quick_pull=1&title={}&body={}"#,
                 urlencoding::encode(&title),
                 urlencoding::encode(&merge_msg),
@@ -218,18 +221,18 @@ https://github.com/{upstream_repo}/compare/{upstream_branch}...{username}:{branc
     Ok(())
 }
 
-fn load_context(config_path: &Path, blueos_version_path: &Path) -> anyhow::Result<SyncContext> {
+fn load_context(config_path: &Path, bluekernel_version_path: &Path) -> anyhow::Result<SyncContext> {
     let config = load_config(config_path)
         .context("cannot load config. Run the `init` command to initialize it.")?;
-    let blueos_version = std::fs::read_to_string(blueos_version_path)
-        .inspect_err(|err| eprintln!("Cannot load blueos-version file: {err:?}"))
+    let bluekernel_version = std::fs::read_to_string(bluekernel_version_path)
+        .inspect_err(|err| eprintln!("Cannot load bluekernel-version file: {err:?}"))
         .map(|version| version.trim().to_string())
         .map(Some)
         .unwrap_or_default();
     Ok(SyncContext {
         config,
-        last_upstream_sha_path: blueos_version_path.to_path_buf(),
-        last_upstream_sha: blueos_version,
+        last_upstream_sha_path: bluekernel_version_path.to_path_buf(),
+        last_upstream_sha: bluekernel_version,
     })
 }
 

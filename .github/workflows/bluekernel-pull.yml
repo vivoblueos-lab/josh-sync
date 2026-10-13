@@ -1,4 +1,4 @@
-name: 'BlueOS Subtree Pull'
+name: 'BlueKernel Subtree Pull'
 
 on:
   workflow_call:
@@ -22,7 +22,7 @@ on:
       branch-name:
         description: 'Name of the branch to create for the sync'
         required: false
-        default: blueos-pull
+        default: bluekernel-pull
         type: string
       pr-base-branch:
         description: 'Base branch for the pull request'
@@ -96,10 +96,10 @@ jobs:
             ~/.cargo/git
             ~/.cargo/registry
             /home/runner/.cache/vivoblueos-josh
-          key: blueos-josh-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.josh-sync-revision }}-pull
+          key: bluekernel-josh-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.josh-sync-revision }}-pull
           restore-keys: |
-            blueos-josh-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.josh-sync-revision }}-
-            blueos-josh-v1-${{ runner.os }}-${{ runner.arch }}-
+            bluekernel-josh-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.josh-sync-revision }}-
+            bluekernel-josh-v1-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Setup bot git name and email
         run: |
@@ -112,7 +112,7 @@ jobs:
             --git "https://github.com/${{ inputs.josh-sync-repository }}" \
             --rev "${{ inputs.josh-sync-revision }}"
 
-      - name: Perform BlueOS sync
+      - name: Perform BlueKernel sync
         id: josh-sync
         shell: bash {0}
         run: |
@@ -148,4 +148,4 @@ jobs:
           PR_HEAD_BRANCH: ${{ inputs.branch-name }}
           PR_BASE_BRANCH: ${{ inputs.pr-base-branch }}
           PR_LABEL: ${{ inputs.pr-label }}
-        run: bash "$GITHUB_WORKSPACE/.github/josh-sync-scripts/scripts/blueos-pull-create-pr.sh"
+        run: bash "$GITHUB_WORKSPACE/.github/josh-sync-scripts/scripts/bluekernel-pull-create-pr.sh"
